@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
+
+# Secrets - NEVER commit
+*.secret
+credentials*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# wandb local logs (data is on wandb cloud)
+wandb/
+
+# Large model weights (cached on Modal volume)
+models/
+*.bin
+*.safetensors
+
+# Keep results and plots (they're small and needed for the report)

@@ -1,0 +1,54 @@
+model:
+  name: "meta-llama/Llama-2-7b-hf"
+  dtype: "float16"
+  device: "cuda"
+  max_new_tokens: 200
+  torch_compile: false
+
+seed: 42
+batch_size: 1
+
+methods:
+  baseline:
+    enabled: true
+
+  kivi:
+    enabled: true
+    configs:
+      - {bits: 4, residual_length: 128}
+      - {bits: 2, residual_length: 128}
+
+  xkv:
+    enabled: true
+    configs:
+      - {rank_k: 64,  recompute_interval: 50}
+      - {rank_k: 128, recompute_interval: 50}
+      - {rank_k: 256, recompute_interval: 50}
+
+  snapkv:
+    enabled: true
+    configs:
+      - {budget_ratio: 0.2, sink_size: 4, observation_window: 32}
+      - {budget_ratio: 0.4, sink_size: 4, observation_window: 32}
+      - {budget_ratio: 0.6, sink_size: 4, observation_window: 32}
+
+  topk:
+    enabled: true
+    configs:
+      - {K: 256,  refresh_interval: 0}
+      - {K: 512,  refresh_interval: 50}
+      - {K: 1024, refresh_interval: 50}
+
+datasets:
+  sequence_lengths: [512, 2048, 8192]
+  synthetic:
+    enabled: true
+    n_per_length: 4
+  wikitext:
+    enabled: true
+    n_examples: 100
+  longbench:
+    enabled: true
+    tasks: ["qasper", "multifieldqa_en", "hotpotqa",
+            "2wikimqa", "gov_report", "qmsum"]
+    n_per_task: 20
