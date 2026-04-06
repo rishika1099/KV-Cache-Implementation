@@ -116,25 +116,53 @@ def save_fig(fig, plots_dir: Path, name: str):
 
 def plot_memory_vs_quality(df, plots_dir):
     df = df[~df['method'].str.contains('FALLBACK', na=False)]
-    ppl_df = df[df['prompt_type'] == 'wikitext'].dropna(subset=['perplexity', 'compression_ratio'])
+    ppl_df = df[df['prompt_type'] == 'wikitext'].dropna(subset=['perplexity'])
+    syn_df = df[df['prompt_type'] == 'synthetic']
     if ppl_df.empty:
         print("  [SKIP] memory_vs_quality: no wikitext/perplexity data")
         return
 
-    with plt.rc_context(ACADEMIC_STYLE):
-        fig, ax = plt.subplots(figsize=(7, 5))
+    # Build lookup: (method, config_json) -> avg compression from synthetic runs
+    import json as _json
+    comp_lookup = {}
+    for _, row in syn_df.iterrows():
+        # Reconstruct original config dict from cfg_ columns
+        cfg = {}
+        for c in [c for c in row.index if c.startswith('cfg_')]:
+            v = row[c]
+            if pd.notna(v):
+                cfg[c.replace('cfg_', '')] = v
+        key = (row['method'], _json.dumps(cfg, sort_keys=True))
+        comp_lookup.setdefault(key, []).append(row['compression_ratio'])
 
-        for method in ppl_df['method'].unique():
-            method_df = ppl_df[ppl_df['method'] == method]
+    avg_comp = {k: sum(v) / len(v) for k, v in comp_lookup.items()}
+
+    with plt.rc_context(ACADEMIC_STYLE):
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        for _, row in ppl_df.iterrows():
+            method = row['method']
+            cfg = {}
+            for c in [c for c in row.index if c.startswith('cfg_')]:
+                v = row[c]
+                if pd.notna(v):
+                    cfg[c.replace('cfg_', '')] = v
+            key = (method, _json.dumps(cfg, sort_keys=True))
+            comp_ratio = avg_comp.get(key, 1.0)
+            ppl = row['perplexity']
+
             base_name = method.replace('_FALLBACK', '')
             color = METHOD_COLORS.get(base_name, '#888888')
             marker = METHOD_MARKERS.get(base_name, 'x')
-            marker_size = 14 if method == 'baseline' else 7
+            marker_size = 14 if method == 'baseline' else 9
+
+            cfg_str = ', '.join(f"{k}={v}" for k, v in sorted(cfg.items()))
+            label = f"{method}" + (f" ({cfg_str})" if cfg_str else "")
 
             ax.scatter(
-                method_df['compression_ratio'],
-                method_df['perplexity'],
-                label=method,
+                comp_ratio,
+                ppl,
+                label=label,
                 color=color,
                 marker=marker,
                 s=marker_size ** 2,
@@ -142,29 +170,27 @@ def plot_memory_vs_quality(df, plots_dir):
                 alpha=0.8,
             )
 
-        # Baseline gold star annotation
-        base_df = ppl_df[ppl_df['method'] == 'baseline']
-        if not base_df.empty:
-            bx = base_df['compression_ratio'].mean()
-            by = base_df['perplexity'].mean()
+        # Baseline annotation
+        base_rows = ppl_df[ppl_df['method'] == 'baseline']
+        if not base_rows.empty:
             ax.annotate(
                 'Baseline\n(reference)',
-                xy=(bx, by),
-                xytext=(bx + 0.1, by + 1),
+                xy=(1.0, base_rows['perplexity'].values[0]),
+                xytext=(1.5, base_rows['perplexity'].values[0] + 3),
                 arrowprops=dict(arrowstyle='->', color='black'),
                 fontsize=8,
             )
 
         ax.set_xlabel('Compression Ratio (higher = more compressed)')
         ax.set_ylabel('Perplexity (lower = better)')
-        ax.set_title('Memory–Quality Tradeoff\n(lower-left is better)')
-        ax.legend(loc='upper right')
+        ax.set_title('Memory-Quality Tradeoff\n(lower-right is Pareto-optimal)')
+        ax.legend(loc='upper right', fontsize=7)
 
         # Add direction annotation
-        ax.annotate('', xy=(0.15, 0.15), xytext=(0.25, 0.25),
+        ax.annotate('', xy=(0.85, 0.15), xytext=(0.75, 0.25),
                     xycoords='axes fraction',
                     arrowprops=dict(arrowstyle='->', color='green', lw=2))
-        ax.text(0.12, 0.12, 'Better', transform=ax.transAxes,
+        ax.text(0.86, 0.12, 'Better', transform=ax.transAxes,
                 color='green', fontsize=9)
 
         fig.tight_layout()
@@ -216,17 +242,40 @@ def plot_throughput_vs_compression(df, plots_dir):
 
 def plot_memory_scaling(df, plots_dir):
     df = df[~df['method'].str.contains('FALLBACK', na=False)]
-    syn_df = df[df['prompt_type'] == 'synthetic'].dropna(subset=['peak_memory_gb', 'seq_len'])
+    syn_df = df[df['prompt_type'] == 'synthetic'].dropna(subset=['kv_cache_mb', 'seq_len'])
     if syn_df.empty:
         print("  [SKIP] memory_scaling: no synthetic data")
         return
 
-    # Best config per method (highest throughput as proxy)
-    best = best_config_per_method(syn_df, 'throughput_tps', higher_is_better=True)
+    # Best config per method (highest compression as proxy)
+    best = best_config_per_method(syn_df, 'compression_ratio', higher_is_better=True)
 
     with plt.rc_context(ACADEMIC_STYLE):
-        fig, ax = plt.subplots(figsize=(7, 5))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
 
+        # Left: KV Cache Size (the actual compression benefit)
+        for method, method_df in best.items():
+            base_name = method.replace('_FALLBACK', '')
+            color = METHOD_COLORS.get(base_name, '#888888')
+            marker = METHOD_MARKERS.get(base_name, 'x')
+
+            grouped = method_df.groupby('seq_len')['kv_cache_mb'].mean().reset_index()
+            grouped = grouped.sort_values('seq_len')
+
+            ax1.plot(
+                grouped['seq_len'],
+                grouped['kv_cache_mb'],
+                label=method,
+                color=color,
+                marker=marker,
+            )
+
+        ax1.set_xlabel('Input Sequence Length (tokens)')
+        ax1.set_ylabel('KV Cache Size (MB)')
+        ax1.set_title('KV Cache Size vs Sequence Length\n(best compression config per method)')
+        ax1.legend()
+
+        # Right: Peak GPU Memory (includes model weights + temporaries)
         for method, method_df in best.items():
             base_name = method.replace('_FALLBACK', '')
             color = METHOD_COLORS.get(base_name, '#888888')
@@ -235,7 +284,7 @@ def plot_memory_scaling(df, plots_dir):
             grouped = method_df.groupby('seq_len')['peak_memory_gb'].mean().reset_index()
             grouped = grouped.sort_values('seq_len')
 
-            ax.plot(
+            ax2.plot(
                 grouped['seq_len'],
                 grouped['peak_memory_gb'],
                 label=method,
@@ -243,10 +292,11 @@ def plot_memory_scaling(df, plots_dir):
                 marker=marker,
             )
 
-        ax.set_xlabel('Input Sequence Length (tokens)')
-        ax.set_ylabel('Peak GPU Memory (GB)')
-        ax.set_title('Memory Scaling vs Sequence Length\n(best config per method)')
-        ax.legend()
+        ax2.set_xlabel('Input Sequence Length (tokens)')
+        ax2.set_ylabel('Peak GPU Memory (GB)')
+        ax2.set_title('Peak GPU Memory vs Sequence Length\n(includes model weights + temporaries)')
+        ax2.legend()
+
         fig.tight_layout()
         save_fig(fig, plots_dir, 'memory_scaling')
         plt.close(fig)
