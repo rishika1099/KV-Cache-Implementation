@@ -19,7 +19,9 @@ from transformers import AutoTokenizer
 from datasets import Dataset
 from huggingface_hub import hf_hub_download
 
-HF_TOKEN  = "HF_TOKEN_REMOVED"
+HF_TOKEN  = os.environ.get("HF_TOKEN", "")
+if not HF_TOKEN:
+    raise EnvironmentError("Set HF_TOKEN env var before running: export HF_TOKEN=hf_...")
 HF_REPO   = "vm2825/longbench-llama2-filtered"
 TASKS     = ["qasper", "multifieldqa_en", "triviaqa", "2wikimqa", "multi_news", "lcc"]
 MAX_TOKENS = 4096
