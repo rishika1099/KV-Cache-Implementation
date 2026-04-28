@@ -35,6 +35,7 @@ datasets:
     n_examples: 100
   longbench:
     enabled: true
-    tasks: ["qasper", "multifieldqa_en", "hotpotqa",
-            "2wikimqa", "gov_report", "qmsum"]
+    hf_path: "vm2825/longbench-llama2-filtered"
+    tasks: ["qasper", "multifieldqa_en", "triviaqa",
+            "2wikimqa", "multi_news", "lcc"]
     n_per_task: 20

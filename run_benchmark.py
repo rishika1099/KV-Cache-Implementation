@@ -360,20 +360,19 @@ def main():
                         context = ex.get('context', '')
                         question = ex.get('input', '')
                         answers = ex.get('answers', [''])
-                        if isinstance(answers, list):
-                            ref = answers[0] if answers else ''
-                        else:
-                            ref = str(answers)
+                        if not isinstance(answers, list):
+                            answers = [str(answers)]
 
+                        # Data is pre-filtered to < 4096 tokens — no truncation needed
                         prompt = f"{context}\n\nQuestion: {question}\nAnswer:"
                         pred, metrics = generate_with_method(
                             model, tokenizer, method_obj,
-                            prompt=prompt[:4096],  # truncate to avoid OOM
+                            prompt=prompt,
                             max_new_tokens=max_new_tokens,
                             device=device,
                         )
                         preds.append(pred)
-                        refs.append(ref)
+                        refs.append(answers)  # full list; score_longbench takes max
 
                     except Exception as e:
                         tqdm.write(f"  [ERROR] LongBench {task_name} example failed: {e}")

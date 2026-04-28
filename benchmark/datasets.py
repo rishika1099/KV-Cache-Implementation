@@ -1,4 +1,7 @@
+import re
+import string
 import warnings
+from collections import Counter
 from pathlib import Path
 from tqdm import tqdm
 
@@ -107,14 +110,17 @@ class DatasetLoader:
         from datasets import load_dataset
         tasks = self.config['datasets']['longbench']['tasks']
         n_per_task = self.config['datasets']['longbench']['n_per_task']
+        hf_path = self.config['datasets']['longbench'].get(
+            'hf_path', 'vm2825/longbench-llama2-filtered'
+        )
 
-        tqdm.write(f"Loading LongBench tasks: {tasks}")
+        tqdm.write(f"Loading LongBench tasks from {hf_path}: {tasks}")
 
         for task in tasks:
             try:
                 dataset = load_dataset(
-                    "THUDM/LongBench", task, split="test",
-                    trust_remote_code=True,
+                    hf_path, task, split="test",
+                    trust_remote_code=(hf_path == 'THUDM/LongBench'),
                 )
                 examples = []
                 for i, ex in enumerate(dataset):
@@ -182,48 +188,84 @@ class DatasetLoader:
     def score_longbench(task, predictions, references):
         """
         Score LongBench predictions.
-        QA tasks: F1
-        Summarization tasks: ROUGE-L
-        Returns: float score
+          QA tasks            : token-level F1 (normalized, Counter-based)
+          Summarization tasks : ROUGE-L
+          Code tasks          : fuzzy line-similarity (fuzz.ratio)
+        references may be list[str] or list[list[str]]; max is taken over multiple refs.
+        Returns: float score in [0, 1]
         """
-        summarization_tasks = {'gov_report', 'qmsum'}
+        summarization_tasks = {'gov_report', 'qmsum', 'multi_news'}
+        code_tasks = {'lcc', 'repobench-p'}
 
         if task in summarization_tasks:
-            return DatasetLoader._rouge_l(predictions, references)
+            score_fn = DatasetLoader._single_rouge_l
+        elif task in code_tasks:
+            score_fn = DatasetLoader._single_code_sim
         else:
-            return DatasetLoader._f1_score(predictions, references)
+            score_fn = DatasetLoader._single_f1
 
-    @staticmethod
-    def _f1_score(predictions, references):
-        """Token-level F1 averaged over examples."""
         scores = []
         for pred, ref in zip(predictions, references):
-            pred_tokens = set(str(pred).lower().split())
-            ref_tokens = set(str(ref).lower().split())
-            if not pred_tokens or not ref_tokens:
-                scores.append(0.0)
-                continue
-            common = pred_tokens & ref_tokens
-            if not common:
-                scores.append(0.0)
-                continue
-            precision = len(common) / len(pred_tokens)
-            recall = len(common) / len(ref_tokens)
-            f1 = 2 * precision * recall / (precision + recall)
-            scores.append(f1)
+            ref_list = ref if isinstance(ref, list) else [ref]
+            scores.append(max(score_fn(str(pred), str(r)) for r in ref_list))
         return sum(scores) / len(scores) if scores else 0.0
 
+    # ── per-example score helpers ─────────────────────────────────────────────
+
     @staticmethod
-    def _rouge_l(predictions, references):
-        """ROUGE-L averaged over examples."""
+    def _normalize(s):
+        """Lowercase, remove articles and punctuation (matches LongBench qa_f1_score)."""
+        s = s.lower()
+        s = "".join(ch for ch in s if ch not in set(string.punctuation))
+        s = re.sub(r"\b(a|an|the)\b", " ", s)
+        return " ".join(s.split())
+
+    @staticmethod
+    def _single_f1(prediction, ground_truth):
+        """Token-level F1 with normalization and Counter (matches LongBench qa_f1_score)."""
+        pred_tokens = DatasetLoader._normalize(prediction).split()
+        ref_tokens = DatasetLoader._normalize(ground_truth).split()
+        if not pred_tokens or not ref_tokens:
+            return 0.0
+        common = Counter(pred_tokens) & Counter(ref_tokens)
+        num_same = sum(common.values())
+        if num_same == 0:
+            return 0.0
+        precision = num_same / len(pred_tokens)
+        recall = num_same / len(ref_tokens)
+        return 2 * precision * recall / (precision + recall)
+
+    @staticmethod
+    def _single_rouge_l(prediction, ground_truth):
+        """ROUGE-L F1 for a single (prediction, reference) pair."""
         try:
             from rouge_score import rouge_scorer
             scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-            scores = []
-            for pred, ref in zip(predictions, references):
-                score = scorer.score(str(ref), str(pred))
-                scores.append(score['rougeL'].fmeasure)
-            return sum(scores) / len(scores) if scores else 0.0
+            return scorer.score(ground_truth, prediction)['rougeL'].fmeasure
         except ImportError:
             warnings.warn("rouge-score not installed, returning 0.0 for ROUGE-L")
             return 0.0
+
+    @staticmethod
+    def _single_code_sim(prediction, ground_truth):
+        """
+        Fuzzy line-similarity for code completion (matches LongBench code_sim_score).
+        Takes the first non-comment, non-fence line from prediction.
+        """
+        try:
+            from thefuzz import fuzz
+        except ImportError:
+            try:
+                from fuzzywuzzy import fuzz
+            except ImportError:
+                warnings.warn("thefuzz not installed; falling back to difflib for lcc")
+                import difflib
+                return difflib.SequenceMatcher(None, prediction, ground_truth).ratio()
+
+        lines = prediction.lstrip('\n').split('\n')
+        first_code_line = ""
+        for line in lines:
+            if '`' not in line and '#' not in line and '//' not in line:
+                first_code_line = line
+                break
+        return fuzz.ratio(first_code_line, ground_truth) / 100
