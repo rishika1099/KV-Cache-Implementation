@@ -26,6 +26,12 @@ credentials*.json
 .DS_Store
 Thumbs.db
 
+# R session detritus
+.Rhistory
+
+# Local snapshot pulled from Modal volume — re-pull on demand
+results/volume_backup/
+
 # wandb local logs (data is on wandb cloud)
 wandb/
 

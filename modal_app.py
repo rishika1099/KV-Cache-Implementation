@@ -42,7 +42,7 @@ image = (
     .pip_install(
         "torch==2.4.1",
         "transformers==4.44.2",
-        "datasets>=2.18.0",
+        "datasets>=2.18.0,<4.0",
         "accelerate>=0.27.0",
         "pyyaml>=6.0",
         "numpy>=1.24.0",
@@ -98,6 +98,7 @@ def _build_method(name: str, cfg: dict):
         return KIVIMethod(
             bits=cfg.get("bits", 4),
             residual_length=cfg.get("residual_length", 128),
+            group_size=cfg.get("group_size", 32),
         )
     elif name == "xkv":
         return XKVMethod(
@@ -113,7 +114,12 @@ def _build_method(name: str, cfg: dict):
     elif name == "topk":
         return TopKMethod(
             K=cfg.get("K", 512),
+            n_sink=cfg.get("n_sink", 128),
+            n_local=cfg.get("n_local", 512),
             refresh_interval=cfg.get("refresh_interval", 50),
+            page_size=cfg.get("page_size", 64),
+            cache_similarity_threshold=cfg.get("cache_similarity_threshold", 0.95),
+            chunk_size=cfg.get("chunk_size", 2048),
         )
     else:
         raise ValueError(f"Unknown method: {name}")
@@ -309,29 +315,41 @@ def run_baseline(
     kv_cache = {}   # prompt_id -> kv_mb
     baseline_results = []
 
+    from benchmark.datasets import DatasetLoader
+
     for p in prompts:
         _set_seeds(seed)
         try:
-            _, metrics = generate_with_method(
+            generated_text, metrics = generate_with_method(
                 model, tokenizer, method,
                 prompt=p["prompt"],
                 max_new_tokens=max_new_tokens,
                 device="cuda",
             )
             kv_cache[p["prompt_id"]] = metrics["kv_cache_mb"]
+
+            # Score LongBench prompts against reference
+            task_score = None
+            if p["prompt_type"] == "longbench" and p.get("reference"):
+                task_score = DatasetLoader.score_longbench(
+                    p["task"], [generated_text], [p["reference"]]
+                )
+
             rec = logger.log(
                 method="baseline", config={},
                 prompt_type=p["prompt_type"],
                 run_metrics=metrics,
                 baseline_kv_mb=None,
                 task=p.get("task", "n/a"),
+                task_score=task_score,
             )
             baseline_results.append(rec)
+            score_str = f" | score={task_score:.3f}" if task_score is not None else ""
             print(
                 f"  baseline | seq={p['seq_len']:5d} | "
                 f"mem={metrics['peak_memory_gb']:.2f}GB | "
                 f"kv={metrics['kv_cache_mb']:.2f}MB | "
-                f"tps={metrics['throughput_tps']:.1f}"
+                f"tps={metrics['throughput_tps']:.1f}{score_str}"
             )
         except Exception as e:
             import traceback
@@ -387,16 +405,26 @@ def run_method(
     results = []
     print(f"\n[modal] Starting {method_name} {cfg_str}  ({len(prompts)} prompts)")
 
+    from benchmark.datasets import DatasetLoader
+
     for p in prompts:
         _set_seeds(seed)
         try:
-            _, metrics = generate_with_method(
+            generated_text, metrics = generate_with_method(
                 model, tokenizer, method,
                 prompt=p["prompt"],
                 max_new_tokens=max_new_tokens,
                 device="cuda",
             )
             baseline_mb = (baseline_kv_cache or {}).get(p["prompt_id"])
+
+            # Score LongBench prompts against reference
+            task_score = None
+            if p["prompt_type"] == "longbench" and p.get("reference"):
+                task_score = DatasetLoader.score_longbench(
+                    p["task"], [generated_text], [p["reference"]]
+                )
+
             rec = logger.log(
                 method=method_name,
                 config=method_cfg,
@@ -404,15 +432,17 @@ def run_method(
                 run_metrics=metrics,
                 baseline_kv_mb=baseline_mb,
                 task=p.get("task", "n/a"),
+                task_score=task_score,
             )
             results.append(rec)
+            score_str = f" | score={task_score:.3f}" if task_score is not None else ""
             print(
                 f"  {method_name:10s} cfg={cfg_str:35s} | "
                 f"seq={p['seq_len']:5d} | "
                 f"mem={metrics['peak_memory_gb']:.2f}GB | "
                 f"kv={metrics['kv_cache_mb']:.2f}MB | "
                 f"ratio={rec['compression_ratio']:.2f}x | "
-                f"tps={metrics['throughput_tps']:.1f}"
+                f"tps={metrics['throughput_tps']:.1f}{score_str}"
             )
         except Exception as e:
             import warnings

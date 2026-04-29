@@ -356,7 +356,15 @@ def plot_latency_breakdown(df, plots_dir):
 
 def plot_longbench_radar(df, plots_dir):
     df = df[~df['method'].str.contains('FALLBACK', na=False)]
-    lb_df = df[df['prompt_type'] == 'longbench'].dropna(subset=['longbench_score'])
+    lb_df = df[df['prompt_type'] == 'longbench'].copy()
+    # Use task_score if longbench_score is not available
+    if 'longbench_score' in lb_df.columns and lb_df['longbench_score'].notna().any():
+        lb_df = lb_df.dropna(subset=['longbench_score'])
+    elif 'task_score' in lb_df.columns and lb_df['task_score'].notna().any():
+        lb_df['longbench_score'] = lb_df['task_score']
+        lb_df = lb_df.dropna(subset=['longbench_score'])
+    else:
+        lb_df = lb_df.iloc[0:0]  # empty
     if lb_df.empty:
         print("  [SKIP] longbench_radar: no LongBench data")
         return
