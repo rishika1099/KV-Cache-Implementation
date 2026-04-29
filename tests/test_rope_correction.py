@@ -86,48 +86,101 @@ def test_round_trip_to_zero():
     assert err < 1e-4
 
 
-def test_realistic_topk_gather_scenario():
-    """Simulate the actual TopK gather: K rotated at sparse positions,
-    re-rotated to dense slot indices. Q at dense slot S_sel must produce
-    the *same dot-product up to RoPE shift* as Q would have produced at
-    the original full length S against original-position keys, modulo
-    the relative-position compression that sparse selection inevitably
-    introduces.
+def test_constant_shift_preserves_qk_dotproduct():
+    """The key correctness property of the BUG-2 fix.
 
-    What we *can* assert is internal consistency: after correction,
-    Q·K_i should equal (rope_apply(unrotated_q, slot_S) ·
-    rope_apply(unrotated_k_i, slot_i))^T — i.e. we sit on a clean
-    RoPE manifold rather than the corrupted one we'd get without the
-    fix.
+    Setup: Q at original full position S_full, K_i at sparse original
+    positions. After gather + constant-shift re-rotation, HF's view is
+    that K' lives at slots 0..S_sel-1 and Q' is at slot S_sel.
+
+    Constant shift = S_sel - S_full applied to every K. We verify that
+    Q'·K'_i (the post-fix value) matches Q·K_i (the un-truncated value)
+    within fp32 noise, for all i.
+
+    This is the property a per-token shift would *break* (it would
+    compact the layout and lose the relative offsets), and the property
+    that lets the model still find the needle in passkey retrieval.
     """
     torch.manual_seed(3)
-    D = 64
+    B, H, D = 1, 1, 64
     S_full = 4096
     S_sel = 16
+    theta = 10000.0
 
-    # Pick a sparse subset of original positions.
-    indices = torch.tensor(
-        sorted([1, 5, 100, 500, 1000, 1500, 2000, 2500,
-                3000, 3200, 3400, 3600, 3800, 3900, 4000, 4090])
-    )
+    indices = torch.tensor(sorted([
+        1, 5, 100, 500, 1000, 1500, 2000, 2500,
+        3000, 3200, 3400, 3600, 3800, 3900, 4000, 4090,
+    ]))
     assert indices.numel() == S_sel
 
-    # Underlying (unrotated) K at those positions.
-    k_unrot = torch.randn(1, 1, S_sel, D)
-    # K as it lives in cache (rotated at original positions).
-    k_at_orig = rope_apply(k_unrot, indices)
+    # Underlying unrotated Q (at full length) and K (at the sparse positions).
+    q_unrot = torch.randn(B, H, 1, D)
+    k_unrot = torch.randn(B, H, S_sel, D)
 
-    # After gather + RoPE-delta correction.
-    slot = torch.arange(S_sel)
-    delta = (slot - indices).to(torch.float32)
-    k_corrected = apply_rope_delta(k_at_orig, delta)
+    # Original (un-truncated) computation.
+    q_full = rope_apply(q_unrot, torch.tensor([S_full]), theta=theta)
+    k_full = rope_apply(k_unrot, indices, theta=theta)
+    dot_orig = torch.matmul(q_full, k_full.transpose(-2, -1)).squeeze()  # (S_sel,)
 
-    # What we should get if we'd rotated `k_unrot` directly at slot positions.
-    k_at_slot_direct = rope_apply(k_unrot, slot)
+    # Post-fix computation: Q rotated by HF at slot S_sel; K rotated by
+    # constant shift = S_sel - S_full applied to its original-position phase.
+    q_slot = rope_apply(q_unrot, torch.tensor([S_sel]), theta=theta)
+    k_at_orig = rope_apply(k_unrot, indices, theta=theta)
+    shift = float(S_sel - S_full)
+    delta = torch.full((S_sel,), shift, dtype=torch.float32)
+    k_corrected = apply_rope_delta(k_at_orig, delta, rope_theta=theta)
+    dot_post = torch.matmul(q_slot, k_corrected.transpose(-2, -1)).squeeze()
 
-    err = (k_corrected - k_at_slot_direct).abs().max().item()
-    print(f"  TopK-gather scenario max err = {err:.3e}")
+    err = (dot_orig - dot_post).abs().max().item()
+    print(f"  max |dot_orig - dot_post| (constant-shift) = {err:.3e}")
+    # fp32 dot of D=64 vectors with a few-thousand-position rotation: 1e-3 ok.
     assert err < 1e-3
+
+
+def test_per_token_shift_breaks_qk_dotproduct():
+    """Confirms the failure mode of the *first* fix attempt.
+
+    Per-token delta_i = slot_i - orig_pos_i compacts the layout. Q at slot
+    S_sel against K_i at slot i would give relative offset S_sel - i,
+    not S_full - orig_pos_i. The dot product diverges from the
+    un-truncated reference. This test demonstrates the divergence so
+    that, if anyone reverts to the per-token formulation, the unit
+    suite fails loudly.
+    """
+    torch.manual_seed(4)
+    B, H, D = 1, 1, 64
+    S_full = 4096
+    S_sel = 16
+    theta = 10000.0
+
+    indices = torch.tensor(sorted([
+        1, 5, 100, 500, 1000, 1500, 2000, 2500,
+        3000, 3200, 3400, 3600, 3800, 3900, 4000, 4090,
+    ]))
+
+    q_unrot = torch.randn(B, H, 1, D)
+    k_unrot = torch.randn(B, H, S_sel, D)
+
+    q_full = rope_apply(q_unrot, torch.tensor([S_full]), theta=theta)
+    k_full = rope_apply(k_unrot, indices, theta=theta)
+    dot_orig = torch.matmul(q_full, k_full.transpose(-2, -1)).squeeze()
+
+    # Per-token delta (the buggy first attempt).
+    q_slot = rope_apply(q_unrot, torch.tensor([S_sel]), theta=theta)
+    k_at_orig = rope_apply(k_unrot, indices, theta=theta)
+    slot = torch.arange(S_sel, dtype=torch.float32)
+    delta_per_token = slot - indices.to(torch.float32)
+    k_buggy = apply_rope_delta(k_at_orig, delta_per_token, rope_theta=theta)
+    dot_buggy = torch.matmul(q_slot, k_buggy.transpose(-2, -1)).squeeze()
+
+    err = (dot_orig - dot_buggy).abs().max().item()
+    print(f"  max |dot_orig - dot_buggy| (per-token shift) = {err:.3e}")
+    # We *expect* a large divergence — something on the order of a few
+    # standard deviations of a random dot product.
+    assert err > 0.1, (
+        "Per-token shift unexpectedly preserves the dot product. "
+        "Did someone change apply_rope_delta semantics?"
+    )
 
 
 def main():
@@ -143,8 +196,12 @@ def main():
     test_round_trip_to_zero()
     print("  OK\n")
 
-    print("test_realistic_topk_gather_scenario ...")
-    test_realistic_topk_gather_scenario()
+    print("test_constant_shift_preserves_qk_dotproduct ...")
+    test_constant_shift_preserves_qk_dotproduct()
+    print("  OK\n")
+
+    print("test_per_token_shift_breaks_qk_dotproduct ...")
+    test_per_token_shift_breaks_qk_dotproduct()
     print("  OK\n")
 
     print("All RoPE-correction tests PASSED.")

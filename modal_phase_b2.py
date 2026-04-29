@@ -87,7 +87,7 @@ def gpu_function(name: str, timeout: int = 3600, memory: int = 16384):
     """All Phase B2 GPU functions share the same decorator stack."""
     return app.function(
         image=image,
-        gpu="a100-80gb",
+        gpu="h100",
         secrets=[modal.Secret.from_name("huggingface")],
         volumes={
             str(RESULTS_PATH):  results_vol,

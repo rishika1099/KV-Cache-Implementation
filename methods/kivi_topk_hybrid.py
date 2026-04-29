@@ -637,17 +637,20 @@ class KIVI_TopK_Method(MethodWrapper):
         out_k = out_k[:, :, order, :]
         out_v = out_v[:, :, order, :]
 
-        # BUG-2 fix: re-rotate keys to their *gather slot* index so attention
-        # against Q (rotated by HF at the truncated cache length) sees a valid
-        # RoPE relative offset. `idx` carries each token's original absolute
-        # position; after the argsort `out_k[:, :, i, :]` corresponds to
-        # `idx_sorted[i]`. The slot index is simply ``i``, so:
-        #     delta_i = i - idx_sorted[i]
+        # BUG-2 fix — constant-shift RoPE re-rotation.
+        # See TopKMethod._gather_layer for the derivation. Total layer length
+        # before gather is ``n_quant + n_over + n_res`` (the layer's S_full).
+        # Each gathered key gets the *same* delta = S_sel - S_full so that
+        # all pair-wise RoPE relative offsets — Q-to-K and K-to-K — are
+        # preserved. A per-token delta of slot_i - orig_pos_i would compact
+        # the layout and *change* the relative offsets, which is what
+        # produced 0% passkey accuracy in the first attempt.
         if self.apply_rope_correction:
+            S_full = n_quant + n_over + n_res
             S_sel = out_k.shape[2]
-            idx_sorted = idx[order] if idx.dim() == 1 else idx
-            slot = torch.arange(S_sel, device=out_k.device)
-            delta = slot - idx_sorted.to(slot.dtype)
+            shift = S_sel - S_full                         # ≤ 0 for truncation
+            delta = torch.full((S_sel,), float(shift),
+                               dtype=torch.float32, device=out_k.device)
             out_k = apply_rope_delta(out_k, delta, rope_theta=self.rope_theta)
 
         return out_k, out_v

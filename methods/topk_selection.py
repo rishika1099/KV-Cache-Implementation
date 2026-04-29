@@ -273,28 +273,37 @@ class TopKMethod(MethodWrapper):
     def _gather_layer(self, k, v, indices):
         """
         Gather selected tokens from one layer's (K, V) and re-rotate the keys
-        so that their RoPE phase matches their *new* gather-slot index.
+        so that, after HF concatenates the new token's Q at logical position
+        ``S_sel``, every selected key still produces the *same* RoPE relative
+        offset to Q that it would have produced in the un-truncated cache.
 
         Index contract:
           • indices.dim() == 1  →  shape (S_sel,)        — shared across batch
-                                  (Phase A/B fast path; B=1 today).
           • indices.dim() == 2  →  shape (B, S_sel)      — per-sample
-                                  (Phase C batched decode).
 
         Both paths preserve k.shape == (B, H, S_full, D) → (B, H, S_sel, D).
 
-        BUG-2 fix
-        ─────────
-        HF's DynamicCache treats the returned cache as if it lived at logical
-        positions ``0 .. len-1``, and rotates the *new* token's Q at position
-        ``len``. But each gathered key was originally rotated at its absolute
-        index ``orig_pos = indices[i]``. Without correction the dot-product
-        ``Q · K_i`` corresponds to a meaningless relative offset and the model
-        cannot find any token (passkey collapses to 0%). We undo the original
-        rotation and apply the new slot rotation in one step:
+        BUG-2 fix — constant-shift formulation
+        ─────────────────────────────────────
+        HF rotates the new token's Q at position ``len(past_kv) == S_sel``.
+        Each cached key K_i was originally rotated at absolute position
+        ``orig_pos_i``. We want the dot product Q·K_i to encode the same
+        relative offset as the un-truncated computation, where Q sat at
+        ``S_full`` and K_i at ``orig_pos_i`` — i.e. relative offset
+        ``S_full - orig_pos_i``.
 
-            delta_i = slot_i - orig_pos_i
-            K_new   = R(delta_i) · K_orig
+        After re-rotation, K_i's effective phase becomes
+        ``orig_pos_i + delta_i``. We need:
+
+            S_sel - (orig_pos_i + delta_i) = S_full - orig_pos_i
+            ⇒ delta_i = S_sel - S_full           (constant, independent of i)
+
+        A *constant* shift preserves every pair-wise RoPE distance — both
+        Q-to-Ks and Ks-among-themselves. The earlier formulation
+        ``delta_i = slot_i - orig_pos_i`` *changed* the relative offsets
+        (because slot indices compact the gather but Q's position only
+        drops by ``S_full - S_sel``), which is why passkey stayed at 0%
+        after the first patch attempt.
         """
         if indices.dim() == 1:
             k_gathered = k[:, :, indices, :]
@@ -306,14 +315,15 @@ class TopKMethod(MethodWrapper):
             v_gathered = torch.gather(v, 2, idx_exp)
 
         if self.apply_rope_correction:
+            S_full = k.shape[2]
             S_sel = k_gathered.shape[2]
-            slot = torch.arange(S_sel, device=k.device)
-            if indices.dim() == 1:
-                delta = slot - indices.to(slot.dtype)
-            else:
-                # (B, S_sel)
-                delta = slot.unsqueeze(0) - indices.to(slot.dtype)
-            k_gathered = apply_rope_delta(k_gathered, delta, rope_theta=self.rope_theta)
+            shift = S_sel - S_full                         # ≤ 0 for truncation
+            # Broadcastable (S_sel,) tensor of the same constant.
+            delta = torch.full((S_sel,), float(shift),
+                               dtype=torch.float32, device=k.device)
+            k_gathered = apply_rope_delta(
+                k_gathered, delta, rope_theta=self.rope_theta,
+            )
 
         return k_gathered, v_gathered
 
