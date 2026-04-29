@@ -1,0 +1,5 @@
+file,n_rows,methods_present,seq_lens,key_observations
+results/phase_b2/passkey/passkey.csv,50,"baseline,kivi,topk,kivi_topk,kivi_topk_c","[4096,8192]","baseline & kivi 100% at 4K all depths; topk-family 0% at all depths and seq_lens; baseline 0% at 8K (model context limit)"
+results/phase_b2/kernel_bench/kernel_bench.csv,20,"baseline,topk_pytorch,topk_triton,kivi_topk_hybrid_a,kivi_topk_hybrid_c","[2048,4096,8192,16384]","topk_triton ~ topk_pytorch (no kernel speedup); hybrid (a) ~ hybrid (c) (~50x slower than topk); baseline=no-op at 0.009ms"
+results/phase_b2/long_context/long_context.csv,20,"baseline,kivi,topk,kivi_topk,kivi_topk_c","[2048,8192,16384,32768]","decode_step is method-overhead not attention; baseline=no-op; cache_hit_rate=0 for all topk (cache disabled per design); blocks_dequantized_avg=1536 for hybrids = full cache dequantized every step"
+results/phase_b2/ppl_sanity/long_context.csv,4,"baseline,kivi,kivi_topk,kivi_topk_c","[2048]","baseline=7.276; kivi=kivi_topk=kivi_topk_c=7.268 EXACTLY identical → confirms compute_method_perplexity does not exercise process_step"
