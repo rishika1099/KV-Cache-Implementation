@@ -59,12 +59,16 @@ _METHOD_NAMES: List[str] = [
 
 def _method_kwargs(name: str, K: int, n_sink: int, n_local: int,
                    bits: int, group_size: int, residual_length: int,
-                   use_selection_cache: bool) -> dict:
+                   use_selection_cache: bool,
+                   head_dim: int = 128,
+                   rope_theta: float = 10000.0) -> dict:
     """Per-method constructor args. Unrecognised kwargs are ignored by factories."""
     common = dict(
         K=K, n_sink=n_sink, n_local=n_local,
         bits=bits, group_size=group_size, residual_length=residual_length,
         use_selection_cache=use_selection_cache,
+        # Position-encoding metadata for the RoPE-correction fix (BUG-2).
+        head_dim=head_dim, rope_theta=rope_theta,
         # All other ablation flags left at default (full-features ON).
     )
     return common
@@ -79,6 +83,7 @@ def _time_method(
     n_warmup: int, n_iter: int,
     device: Any,
     use_selection_cache: bool,
+    rope_theta: float = 10000.0,
 ) -> Optional[dict]:
     """
     Build synthetic KV at `seq_len`, time prefill + per-step decode for one
@@ -96,7 +101,8 @@ def _time_method(
         name,
         **_method_kwargs(name, K, n_sink, n_local,
                          bits, group_size, residual_length,
-                         use_selection_cache),
+                         use_selection_cache,
+                         head_dim=head_dim, rope_theta=rope_theta),
     )
 
     # Prefill timing (single shot — too expensive to repeat at 32K).
@@ -156,6 +162,8 @@ def _measure_ppl(
     bits: int, group_size: int, residual_length: int,
     model, tokenizer,
     n_examples: int, max_length: int, device: str,
+    head_dim: int = 128,
+    rope_theta: float = 10000.0,
 ) -> Optional[float]:
     """PPL on a wikitext slice; max_length is enforced ≥ 4×budget by caller."""
     try:
@@ -169,7 +177,8 @@ def _measure_ppl(
         method_name,
         **_method_kwargs(method_name, K, n_sink, n_local,
                          bits, group_size, residual_length,
-                         use_selection_cache=True),
+                         use_selection_cache=True,
+                         head_dim=head_dim, rope_theta=rope_theta),
     )
     wt = load_dataset("wikitext", "wikitext-103-raw-v1", split="test")
     texts = []
@@ -257,6 +266,18 @@ def run_long_context(
 
             ppl = None
             if model is not None:
+                # Pull real model dims so the RoPE-correction inside TopK /
+                # KIVI+TopK uses the trained-context base. For LLaMA-2-7B these
+                # match the head_dim/rope_theta defaults already, but plumbing
+                # them explicitly keeps the path correct for other models.
+                cfg = getattr(model, "config", None)
+                model_head_dim = (
+                    getattr(cfg, "head_dim", None)
+                    or (cfg.hidden_size // cfg.num_attention_heads
+                        if cfg is not None else head_dim)
+                )
+                model_rope_theta = float(getattr(cfg, "rope_theta", 10000.0)
+                                         if cfg is not None else 10000.0)
                 ppl = _measure_ppl(
                     method_name=name, K=K, n_sink=n_sink, n_local=n_local,
                     bits=bits, group_size=group_size,
@@ -264,6 +285,8 @@ def run_long_context(
                     model=model, tokenizer=tokenizer,
                     n_examples=n_ppl_examples,
                     max_length=max_length, device=device,
+                    head_dim=model_head_dim,
+                    rope_theta=model_rope_theta,
                 )
                 if ppl is not None:
                     metrics["ppl"] = ppl

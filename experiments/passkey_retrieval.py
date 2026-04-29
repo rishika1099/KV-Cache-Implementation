@@ -237,6 +237,20 @@ def run_passkey_retrieval(
             print(f"  depth={depth:.2f}: built {n_trials} prompts "
                   f"(~{n_tok} tokens)")
 
+        # Pull real model dims so the RoPE-correction (BUG-2 fix) inside the
+        # TopK / KIVI+TopK gather paths uses the model's actual head_dim and
+        # rope_theta. Without these, ``make_method`` falls back to defaults
+        # (head_dim=128, rope_theta=10000) which happens to match LLaMA-2-7B
+        # but would silently corrupt other models.
+        cfg = getattr(model, "config", None)
+        model_head_dim = (
+            getattr(cfg, "head_dim", None)
+            or (cfg.hidden_size // cfg.num_attention_heads
+                if cfg is not None else 128)
+        )
+        model_rope_theta = float(getattr(cfg, "rope_theta", 10000.0)
+                                 if cfg is not None else 10000.0)
+
         for name in methods:
             print(f"\n  method = {name}")
             for d_idx, depth in enumerate(depths):
@@ -246,6 +260,8 @@ def run_passkey_retrieval(
                     residual_length=residual_length,
                     use_selection_cache=True,        # prod default; selection
                                                      # quality is what we care about
+                    head_dim=model_head_dim,
+                    rope_theta=model_rope_theta,
                 )
                 method = make_method(name, **kwargs)
 

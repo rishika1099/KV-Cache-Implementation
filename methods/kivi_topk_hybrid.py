@@ -53,6 +53,7 @@ import torch
 
 from .base import MethodWrapper
 from .kivi_quant import KIVIMethod, dequantize
+from .rope_utils import apply_rope_delta
 from .topk_kernels import quant_score
 
 
@@ -88,6 +89,10 @@ class KIVI_TopK_Method(MethodWrapper):
         cache_similarity_threshold: float = 0.95,
         # ── Hybrid scoring path ──
         score_mode: str = "centroid",            # "centroid" (design a) | "quantized" (design c)
+        # ── Position-encoding parameters (BUG-2 fix) ──
+        head_dim: int = 128,
+        rope_theta: float = 10000.0,
+        apply_rope_correction: bool = True,
         # ── Ablation flags (mirror TopKMethod for consistent reporting) ──
         use_head_softmax: bool = True,
         use_criticality_weights: bool = True,
@@ -114,6 +119,11 @@ class KIVI_TopK_Method(MethodWrapper):
         self.n_local = n_local if use_local_tokens else 0
         self.refresh_interval = refresh_interval
         self.cache_similarity_threshold = cache_similarity_threshold
+
+        # Position-encoding metadata for RoPE re-rotation on truncated layouts.
+        self.head_dim = head_dim
+        self.rope_theta = rope_theta
+        self.apply_rope_correction = apply_rope_correction
 
         # Ablation flags
         self.use_head_softmax        = use_head_softmax
@@ -345,8 +355,11 @@ class KIVI_TopK_Method(MethodWrapper):
             self.stats["full_attention_steps"] += 1
             return self._reconstruct_full()
 
-        # Periodic refresh — invalidate selection cache, return full cache
-        if self.refresh_interval > 0 and step % self.refresh_interval == 0:
+        # Periodic refresh — invalidate selection cache, return full cache.
+        # BUG-12 fix: skip step==0 (see topk_selection.py for the same fix).
+        if (self.refresh_interval > 0
+                and step > 0
+                and step % self.refresh_interval == 0):
             self.prev_query = None
             self.cached_indices = None
             self.stats["refresh_steps"] += 1
@@ -621,7 +634,23 @@ class KIVI_TopK_Method(MethodWrapper):
         out_k = torch.cat(pieces_k, dim=2)
         out_v = torch.cat(pieces_v, dim=2)
         order = torch.cat(positions).argsort()
-        return out_k[:, :, order, :], out_v[:, :, order, :]
+        out_k = out_k[:, :, order, :]
+        out_v = out_v[:, :, order, :]
+
+        # BUG-2 fix: re-rotate keys to their *gather slot* index so attention
+        # against Q (rotated by HF at the truncated cache length) sees a valid
+        # RoPE relative offset. `idx` carries each token's original absolute
+        # position; after the argsort `out_k[:, :, i, :]` corresponds to
+        # `idx_sorted[i]`. The slot index is simply ``i``, so:
+        #     delta_i = i - idx_sorted[i]
+        if self.apply_rope_correction:
+            S_sel = out_k.shape[2]
+            idx_sorted = idx[order] if idx.dim() == 1 else idx
+            slot = torch.arange(S_sel, device=out_k.device)
+            delta = slot - idx_sorted.to(slot.dtype)
+            out_k = apply_rope_delta(out_k, delta, rope_theta=self.rope_theta)
+
+        return out_k, out_v
 
     def _reconstruct_full(self):
         """Fall back to KIVI's full FP16 reconstruction (used pre-budget)."""

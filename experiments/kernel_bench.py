@@ -133,6 +133,9 @@ def run_kernel_bench(
         "K": K, "n_sink": n_sink, "n_local": n_local,
         "refresh_interval": 0,
         "use_selection_cache": use_selection_cache,
+        # Plumb head_dim so the RoPE-correction (BUG-2 fix) uses the actual
+        # synthetic-KV shape rather than the registry default of 128.
+        "head_dim": head_dim,
     }
     configs = [
         ("baseline", "baseline", {}),

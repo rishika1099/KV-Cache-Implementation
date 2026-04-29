@@ -1,6 +1,10 @@
+import math
+
 import torch
+
 from .base import MethodWrapper
 from . import topk_kernels
+from .rope_utils import apply_rope_delta
 
 
 class TopKMethod(MethodWrapper):
@@ -57,6 +61,10 @@ class TopKMethod(MethodWrapper):
     def __init__(self, K=512, n_sink=128, n_local=512, refresh_interval=50,
                  page_size=64, cache_similarity_threshold=0.95, chunk_size=2048,
                  use_kernels=True,
+                 # ── Position-encoding parameters (BUG-2 fix) ──
+                 head_dim=128,
+                 rope_theta=10000.0,
+                 apply_rope_correction=True,
                  # ── Ablation flags (default True = full TokenSelect) ──
                  use_head_softmax=True,
                  use_criticality_weights=True,
@@ -71,6 +79,12 @@ class TopKMethod(MethodWrapper):
         self.cache_similarity_threshold = cache_similarity_threshold    # Novelty 5, 11
         self.chunk_size = chunk_size                                    # Novelty 6
         self.use_kernels = use_kernels and topk_kernels.TRITON_AVAILABLE
+
+        # Position-encoding metadata (used when re-rotating gathered keys so that
+        # truncated KV layouts present a valid RoPE relative-offset to Q).
+        self.head_dim = head_dim
+        self.rope_theta = rope_theta
+        self.apply_rope_correction = apply_rope_correction
 
         # Ablation flags (kept verbatim for diagnostics)
         self.use_head_softmax        = use_head_softmax
@@ -214,8 +228,15 @@ class TopKMethod(MethodWrapper):
             self.stats["full_attention_steps"] += 1
             return self.full_past_key_values
 
-        # Periodic full-context refresh
-        if self.refresh_interval > 0 and step % self.refresh_interval == 0:
+        # Periodic full-context refresh.
+        # BUG-12 fix: skip step==0 — at the very first decode step there is
+        # nothing to refresh and the early return short-circuited every
+        # selection-cache path on the *first* token, distorting cache_hit_rate
+        # statistics and forcing a full-context return that callers (PPL,
+        # passkey) interpreted as the active code path.
+        if (self.refresh_interval > 0
+                and step > 0
+                and step % self.refresh_interval == 0):
             self.prev_query = None
             self.cached_indices = None
             self.stats["refresh_steps"] += 1
@@ -249,10 +270,10 @@ class TopKMethod(MethodWrapper):
 
     # ── Phase A→C batch-dim seam ──────────────────────────────────────────────
 
-    @staticmethod
-    def _gather_layer(k, v, indices):
+    def _gather_layer(self, k, v, indices):
         """
-        Gather selected tokens from one layer's (K, V).
+        Gather selected tokens from one layer's (K, V) and re-rotate the keys
+        so that their RoPE phase matches their *new* gather-slot index.
 
         Index contract:
           • indices.dim() == 1  →  shape (S_sel,)        — shared across batch
@@ -261,13 +282,40 @@ class TopKMethod(MethodWrapper):
                                   (Phase C batched decode).
 
         Both paths preserve k.shape == (B, H, S_full, D) → (B, H, S_sel, D).
+
+        BUG-2 fix
+        ─────────
+        HF's DynamicCache treats the returned cache as if it lived at logical
+        positions ``0 .. len-1``, and rotates the *new* token's Q at position
+        ``len``. But each gathered key was originally rotated at its absolute
+        index ``orig_pos = indices[i]``. Without correction the dot-product
+        ``Q · K_i`` corresponds to a meaningless relative offset and the model
+        cannot find any token (passkey collapses to 0%). We undo the original
+        rotation and apply the new slot rotation in one step:
+
+            delta_i = slot_i - orig_pos_i
+            K_new   = R(delta_i) · K_orig
         """
         if indices.dim() == 1:
-            return k[:, :, indices, :], v[:, :, indices, :]
-        # Per-sample gather (Phase C).
-        B, H, _, D = k.shape
-        idx_exp = indices.view(B, 1, -1, 1).expand(B, H, indices.shape[1], D)
-        return torch.gather(k, 2, idx_exp), torch.gather(v, 2, idx_exp)
+            k_gathered = k[:, :, indices, :]
+            v_gathered = v[:, :, indices, :]
+        else:
+            B, H, _, D = k.shape
+            idx_exp = indices.view(B, 1, -1, 1).expand(B, H, indices.shape[1], D)
+            k_gathered = torch.gather(k, 2, idx_exp)
+            v_gathered = torch.gather(v, 2, idx_exp)
+
+        if self.apply_rope_correction:
+            S_sel = k_gathered.shape[2]
+            slot = torch.arange(S_sel, device=k.device)
+            if indices.dim() == 1:
+                delta = slot - indices.to(slot.dtype)
+            else:
+                # (B, S_sel)
+                delta = slot.unsqueeze(0) - indices.to(slot.dtype)
+            k_gathered = apply_rope_delta(k_gathered, delta, rope_theta=self.rope_theta)
+
+        return k_gathered, v_gathered
 
     # ── Novelty 7, 8: Paged scoring ──────────────────────────────────────────
 
@@ -313,7 +361,14 @@ class TopKMethod(MethodWrapper):
         else:
             # PyTorch reference path — also handles ablations the fused
             # kernel does not (e.g. head-softmax disabled).
+            # BUG-6 fix: divide by sqrt(head_dim) to match the Triton kernel
+            # and standard scaled-dot-product attention. Without this scaling
+            # softmax saturates on large head_dim (=128 for LLaMA-2-7B) and
+            # the per-head distribution collapses to a near-one-hot, distorting
+            # the soft-vote sum across heads.
+            head_dim = proxy_q.shape[-1]
             raw_scores = torch.matmul(proxy_q, middle_k.transpose(-2, -1))
+            raw_scores = raw_scores / math.sqrt(head_dim)
             raw_scores = raw_scores.squeeze(2).squeeze(0)               # (H, M)
 
             if self.use_head_softmax:

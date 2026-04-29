@@ -109,9 +109,12 @@ def generate_with_method(model, tokenizer, method, prompt,
         )
         past_kv = _tuple_to_cache(step_kv_tuple)
 
-        # TopK needs to track the full cache: update with new token's KV
-        if hasattr(method, 'update_full_cache'):
-            method.update_full_cache(_cache_to_tuple(step_out.past_key_values))
+        # BUG-13 fix: removed dead `update_full_cache` branch — no method
+        # implements that hook; the new-token append happens inside each
+        # method's own `process_step` (e.g. TopKMethod._update_full_cache,
+        # KIVIMethod's residual/overflow/block ingestion). The vestigial
+        # branch caused confusion during the audit and never fired in
+        # practice. See AUDIT_REPORT.md (BUG-13).
 
         next_token = step_out.logits[:, -1, :].argmax(dim=-1, keepdim=True)
 
@@ -145,21 +148,27 @@ def generate_with_method(model, tokenizer, method, prompt,
 def compute_method_perplexity(model, tokenizer, method, texts,
                               device='cuda', max_length=512):
     """
-    Measure perplexity *through* a method's modified KV cache.
+    Measure perplexity *through* a method's modified KV cache — token-by-token.
 
     For each text:
       1. Run prefill on the first half → get KV cache
       2. Apply method.process_prefill() to compress/modify KV
-      3. Run forward on the second half using modified KV
-      4. Measure cross-entropy loss on the second half's token predictions
+      3. For each remaining token, run a single-token forward through the
+         method's `process_step`-produced cache, then accumulate the NLL
+         of the *next* token under that distribution.
 
-    This captures quality degradation from the KV cache modification.
+    This actually exercises the decode-time path that ablation methods
+    care about. The previous implementation ran a single bulk forward on
+    the whole second half, which bypassed `process_step` entirely — that
+    is why PPL of `kivi`, `kivi_topk` and `kivi_topk_c` came out *exactly*
+    equal in `ppl_sanity/long_context.csv` (they all silently fell back
+    to KIVI's prefill reconstruction). See AUDIT_REPORT.md (BUG-3).
+
     Baseline should match vanilla PPL; lossy methods will be higher.
     """
     import math
 
     model.eval()
-    method.reset()
     total_nll = 0.0
     total_tokens = 0
 
@@ -175,12 +184,15 @@ def compute_method_perplexity(model, tokenizer, method, texts,
             if ids.shape[1] < 4:
                 continue
 
-            # Split: first half for prefill, second half for eval
+            # Split: first half for prefill, second half for token-by-token eval.
             split = ids.shape[1] // 2
             prefix_ids = ids[:, :split]
-            target_ids = ids[:, split:]
+            target_ids = ids[:, split:]                  # (1, T_eval)
+            T_eval = target_ids.shape[1]
+            if T_eval < 2:
+                continue
 
-            # Prefill on prefix
+            # Prefill on prefix.
             method.reset()
             prefill_out = model(
                 input_ids=prefix_ids,
@@ -188,7 +200,6 @@ def compute_method_perplexity(model, tokenizer, method, texts,
                 output_attentions=need_attn,
             )
 
-            # Apply method's KV modification
             past_kv_tuple = _cache_to_tuple(prefill_out.past_key_values)
             attn_weights = prefill_out.attentions if need_attn else None
             past_kv_tuple = method.process_prefill(
@@ -197,24 +208,41 @@ def compute_method_perplexity(model, tokenizer, method, texts,
             )
             past_kv = _tuple_to_cache(past_kv_tuple)
 
-            # Forward on second half with modified KV
-            eval_out = model(
-                input_ids=target_ids,
-                past_key_values=past_kv,
-                use_cache=False,
+            # Score the very first eval token against the prefill logits.
+            # `prefill_out.logits[:, -1, :]` predicts the token at position
+            # `split` — i.e. `target_ids[:, 0]`.
+            first_log_probs = torch.log_softmax(
+                prefill_out.logits[:, -1, :], dim=-1,
             )
+            total_nll += -first_log_probs[0, target_ids[0, 0]].item()
+            total_tokens += 1
 
-            # Compute loss: predict each token from the previous ones
-            logits = eval_out.logits[:, :-1, :]   # (1, T-1, vocab)
-            labels = target_ids[:, 1:]              # (1, T-1)
-            loss = torch.nn.functional.cross_entropy(
-                logits.reshape(-1, logits.shape[-1]),
-                labels.reshape(-1),
-                reduction='sum',
-            )
-            n = labels.shape[1]
-            total_nll += loss.item()
-            total_tokens += n
+            # Step through the remaining eval tokens, calling process_step
+            # so that the method's selection / quantisation / re-rotation
+            # path is exercised between every forward.
+            for t in range(T_eval - 1):
+                input_token = target_ids[:, t : t + 1]
+                step_out = model(
+                    input_ids=input_token,
+                    past_key_values=past_kv,
+                    use_cache=True,
+                    output_attentions=False,
+                )
+
+                step_kv_tuple = _cache_to_tuple(step_out.past_key_values)
+                step_kv_tuple = method.process_step(
+                    step_kv_tuple,
+                    step=t,
+                    attention_weights=None,
+                )
+                past_kv = _tuple_to_cache(step_kv_tuple)
+
+                # `step_out.logits[:, -1, :]` predicts `target_ids[:, t+1]`.
+                log_probs = torch.log_softmax(
+                    step_out.logits[:, -1, :], dim=-1,
+                )
+                total_nll += -log_probs[0, target_ids[0, t + 1]].item()
+                total_tokens += 1
 
     if total_tokens == 0:
         return float('inf')
