@@ -189,17 +189,19 @@ def run_kernel_bench_v3(
 
 # ── 4. ppl_sanity — short PPL run to confirm both hybrids are well-behaved ──
 
-@gpu_function("phase_b2_ppl_sanity", timeout=3600, memory=32768)
+@gpu_function("phase_b2_ppl_sanity", timeout=7200, memory=32768)
 def run_ppl_sanity(
     model_name: str = "meta-llama/Llama-2-7b-hf",
-    n_ppl_examples: int = 30,
+    n_ppl_examples: int = 10,
 ):
     """
-    Sanity-only PPL pass. NOTE this still has the v1 methodology limitation
-    (compute_method_perplexity does not call process_step) — it tells us
-    whether our cache-side modifications corrupted something at prefill,
-    not whether the decode-time selection is good. The headline quality
-    number is in `passkey`.
+    PPL pass using the audit-fixed `compute_method_perplexity` (token-by-token
+    decode that actually calls `process_step` between every forward — see
+    AUDIT_REPORT.md BUG-3). Now meaningfully separates kivi / kivi_topk /
+    kivi_topk_c quality, instead of returning the same number for all three
+    as in v1. Costs ~20× more wall-clock per example than the v1 bulk
+    forward, so n_ppl_examples is dropped from 30 to 10 — still gives a
+    stable mean since each example contributes ~1024 token NLLs.
     """
     _bootstrap()
     from experiments.long_context import run_long_context
@@ -207,7 +209,7 @@ def run_ppl_sanity(
     out_dir = RESULTS_PATH / PHASE_B2_DIR / "ppl_sanity"
     records = run_long_context(
         seq_lens=[2048],
-        methods=["baseline", "kivi", "kivi_topk", "kivi_topk_c"],
+        methods=["baseline", "kivi", "topk", "kivi_topk", "kivi_topk_c"],
         n_layers=32, n_heads=32, head_dim=128,
         K=1024, n_sink=128, n_local=512,
         bits=4, group_size=32, residual_length=128,
