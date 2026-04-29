@@ -18,15 +18,15 @@ import pandas as pd
 METHOD_COLORS = {
     'baseline': '#000000',
     'kivi':     '#0072B2',
-    'xkv':      '#D55E00',
-    'snapkv':   '#009E73',
+    # 'xkv':      '#D55E00',   # removed
+    # 'snapkv':   '#009E73',   # removed
     'topk':     '#CC79A7',
 }
 METHOD_MARKERS = {
     'baseline': '*',
     'kivi':     'o',
-    'xkv':      's',
-    'snapkv':   '^',
+    # 'xkv':      's',   # removed
+    # 'snapkv':   '^',   # removed
     'topk':     'D',
 }
 

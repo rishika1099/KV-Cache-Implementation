@@ -64,9 +64,9 @@ def _set_seeds(seed: int = 42):
 def _build_method(name: str, cfg: dict):
     from methods.baseline       import BaselineMethod
     from methods.kivi_quant     import KIVIMethod
-    from methods.snapkv_eviction import SnapKVMethod
+    # from methods.snapkv_eviction import SnapKVMethod  # removed
     from methods.topk_selection  import TopKMethod
-    from methods.xkv_svd        import XKVMethod
+    # from methods.xkv_svd        import XKVMethod      # removed
 
     if name == "baseline":
         return BaselineMethod()
@@ -517,7 +517,7 @@ def main(
 
     # ── Active method configs ─────────────────────────────────────────────────
     requested = set(m.strip() for m in methods.split(",") if m.strip()) if methods else None
-    method_order = ["baseline", "kivi", "xkv", "snapkv", "topk"]
+    method_order = ["baseline", "kivi", "topk"]  # xkv/snapkv removed
     active = []   # [(name, cfg), ...]
 
     for mname in method_order:
