@@ -84,6 +84,17 @@ def generate_with_method(model, tokenizer, method, prompt,
     next_token = prefill_out.logits[:, -1, :].argmax(dim=-1, keepdim=True)
     generated_ids = []
 
+    # BUG-2 fix (Option B / StreamingLLM-style position injection).
+    # When a method gathers a sparse subset of the cache (TopK / Hybrid), the
+    # cache shrinks from S_full to S_sel, but the K tensors keep their
+    # *original* RoPE phases. HF would otherwise rotate Q at the truncated
+    # cache length, breaking the relative-offset assumption RoPE is built on.
+    # We instead pass `position_ids = [[true_pos]]` so HF rotates Q (and the
+    # new K being appended) at the *true* absolute position, matching the
+    # phases already baked into the cache. Methods set
+    # `apply_rope_correction=False` so the cache is left untouched.
+    true_pos = input_len  # absolute position of the first decode token
+
     t_decode_start = time.perf_counter()
 
     for step in range(max_new_tokens):
@@ -92,11 +103,15 @@ def generate_with_method(model, tokenizer, method, prompt,
 
         generated_ids.append(next_token.item())
 
+        position_ids = torch.tensor(
+            [[true_pos]], dtype=torch.long, device=device,
+        )
         with torch.no_grad():
             step_out = model(
                 input_ids=next_token,
                 past_key_values=past_kv,
                 use_cache=True,
+                position_ids=position_ids,
                 output_attentions=False,  # not needed during decode
             )
 
@@ -117,6 +132,7 @@ def generate_with_method(model, tokenizer, method, prompt,
         # practice. See AUDIT_REPORT.md (BUG-13).
 
         next_token = step_out.logits[:, -1, :].argmax(dim=-1, keepdim=True)
+        true_pos += 1
 
     torch.cuda.synchronize(device)
     t_end = time.perf_counter()
@@ -220,12 +236,23 @@ def compute_method_perplexity(model, tokenizer, method, texts,
             # Step through the remaining eval tokens, calling process_step
             # so that the method's selection / quantisation / re-rotation
             # path is exercised between every forward.
+            #
+            # BUG-2 fix: pass position_ids so HF rotates Q (and the new K) at
+            # the true absolute position, matching the original-position
+            # phases already baked into the (possibly sparse) cache. See the
+            # generate_with_method comment for the full rationale.
             for t in range(T_eval - 1):
                 input_token = target_ids[:, t : t + 1]
+                # Original-sequence position of `input_token`.
+                true_pos = split + t
+                position_ids = torch.tensor(
+                    [[true_pos]], dtype=torch.long, device=device,
+                )
                 step_out = model(
                     input_ids=input_token,
                     past_key_values=past_kv,
                     use_cache=True,
+                    position_ids=position_ids,
                     output_attentions=False,
                 )
 

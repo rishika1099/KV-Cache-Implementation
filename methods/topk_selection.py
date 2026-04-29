@@ -62,9 +62,19 @@ class TopKMethod(MethodWrapper):
                  page_size=64, cache_similarity_threshold=0.95, chunk_size=2048,
                  use_kernels=True,
                  # ── Position-encoding parameters (BUG-2 fix) ──
+                 # Default Option B: do NOT re-rotate the gathered cache.
+                 # Instead, the runner passes position_ids = [[true_pos]] so
+                 # HF rotates Q (and the new K) at the true absolute
+                 # position, preserving relative-offset semantics against
+                 # cached K's that retain their *original-position* RoPE
+                 # phase. The first attempt (re-rotating the cache to slots
+                 # 0..S_sel-1) was algebraically correct for a single step
+                 # but polluted future steps because each step's new K
+                 # rotated at the truncated cache length. Leave this flag
+                 # exposed for ablation. See AUDIT_REPORT.md (BUG-2).
                  head_dim=128,
                  rope_theta=10000.0,
-                 apply_rope_correction=True,
+                 apply_rope_correction=False,
                  # ── Ablation flags (default True = full TokenSelect) ──
                  use_head_softmax=True,
                  use_criticality_weights=True,

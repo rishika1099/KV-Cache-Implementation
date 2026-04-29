@@ -42,7 +42,7 @@ def _make_topk(*, K: int = 512, n_sink: int = 128, n_local: int = 512,
                # Position-encoding (BUG-2 fix)
                head_dim: int = 128,
                rope_theta: float = 10000.0,
-               apply_rope_correction: bool = True,
+               apply_rope_correction: bool = False,
                # ── Phase A ablation flags ──
                use_head_softmax: bool = True,
                use_selection_cache: bool = True,
@@ -83,7 +83,7 @@ def _make_kivi_topk(*,
                     # Position-encoding (BUG-2 fix)
                     head_dim: int = 128,
                     rope_theta: float = 10000.0,
-                    apply_rope_correction: bool = True,
+                    apply_rope_correction: bool = False,
                     # Ablation flags (consistent with topk)
                     use_head_softmax: bool = True,
                     use_criticality_weights: bool = True,

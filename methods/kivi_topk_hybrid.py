@@ -90,9 +90,13 @@ class KIVI_TopK_Method(MethodWrapper):
         # ── Hybrid scoring path ──
         score_mode: str = "centroid",            # "centroid" (design a) | "quantized" (design c)
         # ── Position-encoding parameters (BUG-2 fix) ──
+        # Default Option B: don't re-rotate the materialised cache; the
+        # runner injects position_ids so HF rotates Q (and the new K) at
+        # the true absolute position. See methods/topk_selection.py for
+        # the full rationale and AUDIT_REPORT.md (BUG-2).
         head_dim: int = 128,
         rope_theta: float = 10000.0,
-        apply_rope_correction: bool = True,
+        apply_rope_correction: bool = False,
         # ── Ablation flags (mirror TopKMethod for consistent reporting) ──
         use_head_softmax: bool = True,
         use_criticality_weights: bool = True,
