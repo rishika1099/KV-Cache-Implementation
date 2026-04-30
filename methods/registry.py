@@ -78,8 +78,13 @@ def _make_kivi_topk(*,
                     K: int = 1024, n_sink: int = 128, n_local: int = 512,
                     refresh_interval: int = 50,
                     cache_similarity_threshold: float = 0.95,
-                    # Hybrid scoring path: "centroid" (a) | "quantized" (c)
+                    # Hybrid scoring path: "centroid" (a) | "quantized" (c) | "maxpool"
                     score_mode: str = "centroid",
+                    # Retrieval-fix research knobs (all default off / 1)
+                    two_pass_factor: int = 0,
+                    proxy_history: int = 1,
+                    proxy_pool: str = "mean",
+                    dynamic_sinks: bool = False,
                     # Position-encoding (BUG-2 fix)
                     head_dim: int = 128,
                     rope_theta: float = 10000.0,
@@ -97,6 +102,10 @@ def _make_kivi_topk(*,
         refresh_interval=refresh_interval,
         cache_similarity_threshold=cache_similarity_threshold,
         score_mode=score_mode,
+        two_pass_factor=two_pass_factor,
+        proxy_history=proxy_history,
+        proxy_pool=proxy_pool,
+        dynamic_sinks=dynamic_sinks,
         head_dim=head_dim,
         rope_theta=rope_theta,
         apply_rope_correction=apply_rope_correction,
@@ -114,6 +123,41 @@ def _make_kivi_topk_c(**kwargs) -> MethodWrapper:
     return _make_kivi_topk(**kwargs)
 
 
+def _make_kivi_topk_maxpool(**kwargs) -> MethodWrapper:
+    """Maxpool block-summary scoring (Tier-1 retrieval fix)."""
+    kwargs["score_mode"] = "maxpool"
+    return _make_kivi_topk(**kwargs)
+
+
+def _make_kivi_topk_two_pass(**kwargs) -> MethodWrapper:
+    """Centroid pass-1 → exact quant_score rerank (Tier-2 retrieval fix)."""
+    kwargs.setdefault("two_pass_factor", 2)
+    return _make_kivi_topk(**kwargs)
+
+
+def _make_kivi_topk_multiq(**kwargs) -> MethodWrapper:
+    """Multi-query proxy pooling last 8 K-vectors (Tier-2 retrieval fix)."""
+    kwargs.setdefault("proxy_history", 8)
+    kwargs.setdefault("proxy_pool", "max")
+    return _make_kivi_topk(**kwargs)
+
+
+def _make_kivi_topk_dynsink(**kwargs) -> MethodWrapper:
+    """Dynamic sinks via prefill K-norm importance (Tier-2 retrieval fix)."""
+    kwargs.setdefault("dynamic_sinks", True)
+    return _make_kivi_topk(**kwargs)
+
+
+def _make_kivi_topk_all(**kwargs) -> MethodWrapper:
+    """All four retrieval fixes stacked. The 'kitchen sink' baseline."""
+    kwargs.setdefault("score_mode", "maxpool")
+    kwargs.setdefault("two_pass_factor", 2)
+    kwargs.setdefault("proxy_history", 8)
+    kwargs.setdefault("proxy_pool", "max")
+    kwargs.setdefault("dynamic_sinks", True)
+    return _make_kivi_topk(**kwargs)
+
+
 # ── Public registry ──────────────────────────────────────────────────────────
 
 METHOD_REGISTRY: Dict[str, Callable[..., MethodWrapper]] = {
@@ -122,6 +166,12 @@ METHOD_REGISTRY: Dict[str, Callable[..., MethodWrapper]] = {
     "topk":         _make_topk,
     "kivi_topk":    _make_kivi_topk,    # Phase B hybrid (design a)
     "kivi_topk_c":  _make_kivi_topk_c,  # Phase B hybrid (design c)
+    # Retrieval-fix variants (research/retrieval-fixes branch).
+    "kivi_topk_maxpool":  _make_kivi_topk_maxpool,
+    "kivi_topk_twopass":  _make_kivi_topk_two_pass,
+    "kivi_topk_multiq":   _make_kivi_topk_multiq,
+    "kivi_topk_dynsink":  _make_kivi_topk_dynsink,
+    "kivi_topk_all":      _make_kivi_topk_all,
 }
 
 
@@ -147,5 +197,10 @@ def describe(name: str) -> Dict[str, Any]:
         "topk":      "TokenSelect dynamic top-K selection (Triton fused kernels)",
         "kivi_topk":   "Phase B hybrid: KIVI storage + centroid-scored top-K (design a)",
         "kivi_topk_c": "Phase B hybrid: KIVI storage + Triton quant-aware top-K (design c)",
+        "kivi_topk_maxpool": "Hybrid + per-channel maxpool block summary (retrieval fix #1)",
+        "kivi_topk_twopass": "Hybrid + centroid-then-exact two-pass selection (retrieval fix #2)",
+        "kivi_topk_multiq":  "Hybrid + multi-query proxy pool over last 8 K-vectors (retrieval fix #3)",
+        "kivi_topk_dynsink": "Hybrid + importance-picked dynamic sinks at prefill (retrieval fix #4)",
+        "kivi_topk_all":     "Hybrid + all four retrieval fixes stacked (kitchen-sink)",
     }
     return {"name": name, "description": descriptions.get(name, "")}

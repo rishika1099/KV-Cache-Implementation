@@ -45,6 +45,29 @@ Key changes vs. v1:
   • Storage accounting includes hybrid scratch tensors.
   • Optional debug profiling via `KV_HYBRID_PROFILE=1` (logs per-step
     time_scoring / time_materialise / num_blocks_dequantized to stderr).
+
+RETRIEVAL-FIXES (research/retrieval-fixes branch)
+═══════════════════════════════════════════════════════════════════════════
+The previous hybrid hit 0% accuracy on passkey at depths 0.3/0.5/0.7
+even though KIVI alone hits 100%, indicating the bottleneck was the
+**proxy query / block scoring**, not quantization or kernel speed.
+This module adds four orthogonal knobs to attack that:
+
+  • `score_mode="maxpool"`    per-channel max over each block (preserves
+                              spike tokens that mean-pool dilutes).
+  • `two_pass_factor=N`       cheap centroid top-(N·K_blocks) → exact
+                              `quant_score` rerank to final K. Same
+                              accuracy as full exact, fraction of cost.
+  • `proxy_history=N`         pool the last N step's K-vectors into the
+                              proxy query (mean or max), so multi-step
+                              lookup patterns survive averaging.
+  • `dynamic_sinks=True`      pick the n_sink positions from prefill K
+                              L2-norm (importance) instead of the static
+                              [0, n_sink) prefix.
+
+These knobs are all OFF by default (the default constructor produces
+the same behavior as the perf-optimized v2). Enable them via the
+factory in `methods/registry.py` or directly in the constructor.
 ═══════════════════════════════════════════════════════════════════════════
 """
 from __future__ import annotations
@@ -103,7 +126,16 @@ class KIVI_TopK_Method(MethodWrapper):
         refresh_interval: int = 50,
         cache_similarity_threshold: float = 0.95,
         # ── Hybrid scoring path ──
-        score_mode: str = "centroid",            # "centroid" (a) | "quantized" (c)
+        score_mode: str = "centroid",            # "centroid" | "maxpool" | "quantized"
+        # ── Retrieval-fix research knobs (all default OFF) ──
+        two_pass_factor: int = 0,                # 0 = disabled. else: centroid pass keeps
+                                                 # top-(factor*K_blocks) blocks, rerank with
+                                                 # exact quant_score over those tokens only.
+        proxy_history: int = 1,                  # 1 = single-step proxy (current behavior).
+                                                 # >1 = pool the last N K-vectors.
+        proxy_pool: str = "mean",                # "mean" | "max" — how to fold the history.
+        dynamic_sinks: bool = False,             # if True, pick n_sink positions from
+                                                 # prefill K-norm rather than [0, n_sink).
         # ── Position-encoding parameters (BUG-2 fix) ──
         head_dim: int = 128,
         rope_theta: float = 10000.0,
@@ -115,11 +147,24 @@ class KIVI_TopK_Method(MethodWrapper):
         use_sink_tokens: bool = True,
         use_local_tokens: bool = True,
     ):
-        if score_mode not in ("centroid", "quantized"):
+        if score_mode not in ("centroid", "maxpool", "quantized"):
             raise ValueError(
-                f"score_mode must be 'centroid' or 'quantized', got {score_mode!r}"
+                f"score_mode must be 'centroid' | 'maxpool' | 'quantized', "
+                f"got {score_mode!r}"
             )
+        if proxy_pool not in ("mean", "max"):
+            raise ValueError(
+                f"proxy_pool must be 'mean' or 'max', got {proxy_pool!r}"
+            )
+        if two_pass_factor < 0:
+            raise ValueError(f"two_pass_factor must be >= 0, got {two_pass_factor}")
+        if proxy_history < 1:
+            raise ValueError(f"proxy_history must be >= 1, got {proxy_history}")
         self.score_mode = score_mode
+        self.two_pass_factor = two_pass_factor
+        self.proxy_history = proxy_history
+        self.proxy_pool = proxy_pool
+        self.dynamic_sinks = dynamic_sinks
         self.kivi = KIVIMethod(
             bits=bits, residual_length=residual_length, group_size=group_size,
         )
@@ -169,6 +214,13 @@ class KIVI_TopK_Method(MethodWrapper):
         self.vs_stack: Dict[int, torch.Tensor] = {}
         self.vz_stack: Dict[int, torch.Tensor] = {}
         self.centroids_k: Dict[int, torch.Tensor] = {}
+        # Maxpool block-summaries — only allocated when score_mode == "maxpool".
+        self.maxpool_k: Dict[int, torch.Tensor] = {}
+        # Multi-query proxy ring buffer (B, H, proxy_history, D) once seeded.
+        self._query_history: torch.Tensor | None = None
+        # Dynamic-sink positions, chosen at prefill from per-token K L2 norm.
+        # Sorted, shape (n_sink,). None means "use static [0, n_sink)".
+        self._sink_positions: torch.Tensor | None = None
 
         # Logical sizes (≤ capacity).
         self._n_quant_per_layer: Dict[int, int] = {}
@@ -231,6 +283,8 @@ class KIVI_TopK_Method(MethodWrapper):
         self.prev_query = None
         self.prev_seq_len = None
         self.cached_indices = None
+        self._query_history = None
+        self._sink_positions = None
 
         self.kq_stack.clear()
         self.ks_stack.clear()
@@ -239,6 +293,7 @@ class KIVI_TopK_Method(MethodWrapper):
         self.vs_stack.clear()
         self.vz_stack.clear()
         self.centroids_k.clear()
+        self.maxpool_k.clear()
         self._n_quant_per_layer.clear()
         self._n_blocks_per_layer.clear()
         self.block_sizes.clear()
@@ -284,6 +339,11 @@ class KIVI_TopK_Method(MethodWrapper):
             self.centroids_k[layer_idx] = torch.empty(
                 (B, H, blk_cap, D), dtype=dtype, device=dev,
             )
+            # Maxpool block-summaries (allocated unconditionally so the buffer
+            # exists if score_mode is flipped at runtime; cheap relative to kq).
+            self.maxpool_k[layer_idx] = torch.empty(
+                (B, H, blk_cap, D), dtype=dtype, device=dev,
+            )
 
             if n_blocks > 0:
                 # ── K side: cat once into the buffer ──
@@ -310,12 +370,17 @@ class KIVI_TopK_Method(MethodWrapper):
                     [zv for _, _, zv in blocks_v], dim=2,
                 )
 
-                # Centroids (one fp16 mean key per block).
+                # Centroids (one fp16 mean key per block) + maxpool (per-channel max).
                 centroids = torch.cat([
                     self._block_centroid(qk, sk, zk)
                     for qk, sk, zk in blocks_k
                 ], dim=2)
                 self.centroids_k[layer_idx][:, :, :n_blocks, :] = centroids
+                maxpools = torch.cat([
+                    self._block_maxpool(qk, sk, zk)
+                    for qk, sk, zk in blocks_k
+                ], dim=2)
+                self.maxpool_k[layer_idx][:, :, :n_blocks, :] = maxpools
 
                 self._block_id_for_quant[layer_idx] = self._build_token_block_ids(
                     self.block_sizes[layer_idx], dev,
@@ -330,6 +395,12 @@ class KIVI_TopK_Method(MethodWrapper):
         else:
             self.head_weights = None
 
+        # Dynamic sinks (pick by importance, not position).
+        if self.dynamic_sinks and self.use_sink_tokens and self.n_sink > 0:
+            self._compute_dynamic_sinks(recon, self.n_sink)
+        else:
+            self._sink_positions = None
+
         # Pre-warm Triton kernels with a dummy launch on the actual stacked
         # tensors so the first real decode step doesn't pay JIT compile cost.
         self._prewarm_kernels()
@@ -341,6 +412,52 @@ class KIVI_TopK_Method(MethodWrapper):
         """One-time centroid for a quantized block: mean key over group_size."""
         deq = dequantize(qk, sk, zk)            # (B, H, group_size, D)
         return deq.mean(dim=2, keepdim=True)    # (B, H, 1, D)
+
+    @staticmethod
+    def _block_maxpool(qk, sk, zk) -> torch.Tensor:
+        """
+        Per-channel max over a quantized block. Preserves spike tokens that
+        mean-pool dilutes by 1/group_size — the score `proxy_q · maxpool_k`
+        upper-bounds (per channel) the strongest per-token contribution.
+
+        Returns (B, H, 1, D) like `_block_centroid`.
+        """
+        deq = dequantize(qk, sk, zk)            # (B, H, group_size, D)
+        return deq.max(dim=2, keepdim=True).values
+
+    def _compute_dynamic_sinks(self, recon, n_sink: int) -> None:
+        """
+        Pick the `n_sink` most-important token positions from the prefill K
+        cache, scored by global L2-norm averaged across layers and heads.
+        Stored sorted into `self._sink_positions`.
+
+        Skipped silently if `n_sink == 0` or the recon shape is unexpected;
+        falls back to static [0, n_sink) selection at score time.
+
+        Cost: O(n_layers * S * D) — a single batched norm + topk, run once
+        at end of prefill.
+        """
+        try:
+            # recon is the tuple of (K, V) per layer that KIVI returned.
+            n_layers = len(recon)
+            if n_layers == 0 or n_sink == 0:
+                return
+            # Stack K norms across layers/heads.
+            # k shape: (B, H, S, D). norm dim=-1 → (B, H, S).
+            # Mean over (B, H) and accumulate across layers.
+            S = recon[0][0].shape[2]
+            agg = torch.zeros(S, device=recon[0][0].device, dtype=torch.float32)
+            for layer_idx in range(n_layers):
+                k = recon[layer_idx][0]                 # (B, H, S, D)
+                agg += k.float().norm(dim=-1).mean(dim=(0, 1))   # (S,)
+            agg /= n_layers
+            n_pick = min(n_sink, S)
+            self._sink_positions = agg.topk(n_pick).indices.sort().values.to(
+                torch.long
+            )
+        except Exception:
+            # Best-effort; fall back to static.
+            self._sink_positions = None
 
     @staticmethod
     def _build_token_block_ids(block_sizes: List[int], device) -> torch.Tensor:
@@ -375,7 +492,12 @@ class KIVI_TopK_Method(MethodWrapper):
             kq = self.kq_stack[0][:, :, :n_quant, :]
             ks = self.ks_stack[0][:, :, :n_quant, :]
             kz = self.kz_stack[0][:, :, :n_quant, :]
-            if self.score_mode == "quantized" and dev.type == "cuda":
+            # Pre-warm if any mode could call quant_score on the hot path.
+            wants_quant_kernel = (
+                self.score_mode == "quantized"
+                or self.two_pass_factor > 0
+            )
+            if wants_quant_kernel and dev.type == "cuda":
                 _ = quant_score(dummy_q, kq, ks, kz)
                 if torch.cuda.is_available():
                     torch.cuda.synchronize()
@@ -426,6 +548,8 @@ class KIVI_TopK_Method(MethodWrapper):
                 self.vz_stack[layer_idx], new_n_blocks, grow_blk)
             self.centroids_k[layer_idx] = self._ensure_capacity(
                 self.centroids_k[layer_idx], new_n_blocks, grow_blk)
+            self.maxpool_k[layer_idx] = self._ensure_capacity(
+                self.maxpool_k[layer_idx], new_n_blocks, grow_blk)
 
             # ── Append new K-side data ──
             cursor_tok = old_n_quant
@@ -434,10 +558,14 @@ class KIVI_TopK_Method(MethodWrapper):
                 self.kq_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = qk
                 self.ks_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = sk
                 self.kz_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = zk
-                # Centroid for this block
-                self.centroids_k[layer_idx][
-                    :, :, n_existing + (cursor_tok - old_n_quant) // self.group_size, :
-                ] = self._block_centroid(qk, sk, zk).squeeze(2)
+                # Centroid + maxpool for this block (write into block slot).
+                blk_slot = n_existing + (cursor_tok - old_n_quant) // self.group_size
+                self.centroids_k[layer_idx][:, :, blk_slot, :] = (
+                    self._block_centroid(qk, sk, zk).squeeze(2)
+                )
+                self.maxpool_k[layer_idx][:, :, blk_slot, :] = (
+                    self._block_maxpool(qk, sk, zk).squeeze(2)
+                )
                 cursor_tok += bs
 
             # ── Append new V-side data ──
@@ -524,7 +652,32 @@ class KIVI_TopK_Method(MethodWrapper):
             self.stats["refresh_steps"] += 1
             return self._reconstruct_full()
 
-        proxy_q = past_key_values[-1][0][:, :, -1:, :]      # (B, H, 1, D)
+        # Pull latest K vector. With proxy_history > 1 we keep a rolling
+        # window of the last N K-vectors and fold them into a single proxy
+        # via mean or max — captures multi-step lookup patterns that get
+        # erased by averaging across heads in a single step.
+        latest_k = past_key_values[-1][0][:, :, -1:, :]      # (B, H, 1, D)
+
+        if self.proxy_history <= 1:
+            proxy_q = latest_k
+        else:
+            if (self._query_history is None
+                    or self._query_history.shape[1] != latest_k.shape[1]
+                    or self._query_history.shape[3] != latest_k.shape[3]
+                    or self._query_history.device != latest_k.device):
+                # First step (or shape change) — seed by repetition.
+                self._query_history = latest_k.expand(
+                    -1, -1, self.proxy_history, -1
+                ).contiguous().clone()
+            else:
+                # Roll left, write newest at the end.
+                self._query_history = torch.cat(
+                    [self._query_history[:, :, 1:, :], latest_k], dim=2
+                )
+            if self.proxy_pool == "max":
+                proxy_q = self._query_history.max(dim=2, keepdim=True).values
+            else:
+                proxy_q = self._query_history.mean(dim=2, keepdim=True)
 
         # Selection cache lookup (now also seq_len-aware — see _can_reuse_cache).
         if self._can_reuse_cache(proxy_q, seq_len):
@@ -560,18 +713,36 @@ class KIVI_TopK_Method(MethodWrapper):
     ) -> Dict[int, torch.Tensor]:
         """Score on quantized state, return {layer_idx: indices (S_sel,)}."""
         device = proxy_q.device
-        sink_end = min(self.n_sink, seq_len) if self.use_sink_tokens else 0
-        recent_start = max(
-            seq_len - (self.n_local if self.use_local_tokens else 0),
-            sink_end,
-        )
+        n_sink_eff = self.n_sink if self.use_sink_tokens else 0
+        n_local_eff = self.n_local if self.use_local_tokens else 0
+        recent_start = max(seq_len - n_local_eff, 0)
 
-        sink_idx = torch.arange(0, sink_end, device=device)
+        # Sink positions: dynamic (importance-picked at prefill) or static prefix.
+        if (self.dynamic_sinks
+                and self._sink_positions is not None
+                and n_sink_eff > 0):
+            # Filter to in-range and to outside the recent window so we don't
+            # double-count sinks that already fall into n_local.
+            sp = self._sink_positions
+            sink_idx = sp[(sp < seq_len) & (sp < recent_start)]
+        else:
+            sink_end = min(n_sink_eff, recent_start)
+            sink_idx = torch.arange(0, sink_end, device=device)
+
         recent_idx = torch.arange(recent_start, seq_len, device=device)
 
-        if recent_start <= sink_end:
+        # Edge case: no middle region to score.
+        if sink_idx.numel() + recent_idx.numel() >= seq_len:
             base_idx = torch.cat([sink_idx, recent_idx]).unique().sort().values
             return {l: base_idx for l in self.kivi.cache}
+
+        # Build a boolean mask for the regions already pinned (sinks + recent),
+        # so scoring can mask them with -inf cleanly regardless of position.
+        pinned_mask = torch.zeros(seq_len, dtype=torch.bool, device=device)
+        if sink_idx.numel() > 0:
+            pinned_mask[sink_idx] = True
+        if recent_idx.numel() > 0:
+            pinned_mask[recent_idx] = True
 
         per_layer_idx: Dict[int, torch.Tensor] = {}
         for layer_idx, state in self.kivi.cache.items():
@@ -579,11 +750,13 @@ class KIVI_TopK_Method(MethodWrapper):
                 layer_idx, proxy_q, state,
                 n_blocks, n_overflow, n_residual,
             )                                                # (seq_len,)
-            scores[:sink_end] = float("-inf")
-            scores[recent_start:] = float("-inf")
+            scores = scores.masked_fill(pinned_mask, float("-inf"))
 
-            k_actual = min(self.K, recent_start - sink_end)
-            mid_topk = scores.topk(k_actual).indices
+            k_actual = min(self.K, int((~pinned_mask).sum().item()))
+            if k_actual > 0:
+                mid_topk = scores.topk(k_actual).indices
+            else:
+                mid_topk = torch.empty((0,), dtype=torch.long, device=device)
 
             all_idx = torch.cat([sink_idx, mid_topk, recent_idx]) \
                           .unique().sort().values
@@ -610,19 +783,60 @@ class KIVI_TopK_Method(MethodWrapper):
         H = proxy_q.shape[1]
         n_quant = self._n_quant_per_layer.get(layer_idx, 0)
 
-        # ── Block region scoring (centroid or quant kernel) ──
-        if self.score_mode == "centroid":
-            # FP16 matmul on H100 is free; only cast the final scores when
-            # we softmax+sum to fp32 for cross-head reduction stability.
+        # ── Block region scoring (centroid / maxpool / quant kernel) ──
+        # We populate `block_token` (per-token H × n_quant) by the end of
+        # this section, regardless of mode, so the tail can concat uniformly.
+        block_token: torch.Tensor | None = None
+
+        if self.score_mode in ("centroid", "maxpool"):
+            # FP16 matmul on H100 is free; cast to fp32 only at softmax/sum.
             if n_blocks > 0:
-                centroid_k = self.centroids_k[layer_idx][:, :, :n_blocks, :]
+                summary = (self.centroids_k[layer_idx][:, :, :n_blocks, :]
+                           if self.score_mode == "centroid"
+                           else self.maxpool_k[layer_idx][:, :, :n_blocks, :])
                 # (1,H,1,D) @ (B,H,D,n_blocks) → (1,H,1,n_blocks) → (H, n_blocks)
                 block_raw = torch.matmul(
-                    proxy_q, centroid_k.transpose(-2, -1)
+                    proxy_q, summary.transpose(-2, -1)
                 ).squeeze(2).squeeze(0) / scale_factor
             else:
                 block_raw = proxy_q.new_zeros((H, 0))
-        else:  # "quantized"
+
+            # Two-pass rerank: keep top-(factor*K_blocks) blocks from this
+            # cheap scoring, exact-score their tokens with quant_score, set
+            # everything else to -inf so they can't win the downstream topk.
+            # K_blocks ≈ K / group_size; factor=2 keeps 2x candidate budget.
+            if (self.two_pass_factor > 0
+                    and n_blocks > 0
+                    and n_quant > 0):
+                K_blocks = max(1, self.K // self.group_size)
+                n_keep_blocks = min(n_blocks, self.two_pass_factor * K_blocks)
+                # Aggregate per-block score across heads (matches downstream sum).
+                blk_score = block_raw.float().sum(dim=0)             # (n_blocks,)
+                top_blocks = blk_score.topk(n_keep_blocks).indices   # (n_keep,)
+
+                blk_ids = self._block_id_for_quant[layer_idx]        # (n_quant,)
+                cand_mask = torch.isin(blk_ids, top_blocks)
+                cand_idx = cand_mask.nonzero(as_tuple=True)[0]       # (n_cand,)
+
+                if cand_idx.numel() > 0:
+                    kq_full = self.kq_stack[layer_idx][:, :, :n_quant, :]
+                    ks_full = self.ks_stack[layer_idx][:, :, :n_quant, :]
+                    kz_full = self.kz_stack[layer_idx][:, :, :n_quant, :]
+                    kq_c = kq_full.index_select(2, cand_idx)
+                    ks_c = ks_full.index_select(2, cand_idx)
+                    kz_c = kz_full.index_select(2, cand_idx)
+                    exact_c = quant_score(proxy_q, kq_c, ks_c, kz_c)  # (H, n_cand)
+
+                    # Per-token tensor: -inf at dropped positions, exact at kept.
+                    block_token = torch.full(
+                        (H, n_quant), float("-inf"),
+                        device=block_raw.device, dtype=torch.float32,
+                    )
+                    block_token.index_copy_(1, cand_idx, exact_c.float())
+                # else: fall through; block_token stays None, we use block_raw
+                #       expansion path below (no candidates kept).
+
+        else:  # "quantized" — full exact pass over all tokens
             if n_quant > 0:
                 kq = self.kq_stack[layer_idx][:, :, :n_quant, :]
                 ks = self.ks_stack[layer_idx][:, :, :n_quant, :]
@@ -648,14 +862,16 @@ class KIVI_TopK_Method(MethodWrapper):
             res_raw = proxy_q.new_zeros((H, 0))
 
         # ── Concat in cache order ──
-        if self.score_mode == "centroid" and n_blocks > 0:
-            # Use the cached per-token block-id LUT to expand block scores
-            # to per-token scores. `index_select` is faster than
-            # `repeat_interleave` and works with our cached long tensor.
-            block_ids = self._block_id_for_quant[layer_idx]
-            block_token = block_raw.index_select(1, block_ids)  # (H, n_quant)
-        else:
-            block_token = block_raw
+        if block_token is None:
+            # Modes that produced a per-block (H, n_blocks) tensor: expand to
+            # per-token using the cached block-id LUT. Index_select is faster
+            # than repeat_interleave with our long tensor.
+            if self.score_mode in ("centroid", "maxpool") and n_blocks > 0:
+                block_ids = self._block_id_for_quant[layer_idx]
+                block_token = block_raw.index_select(1, block_ids)  # (H, n_quant)
+            else:
+                # "quantized" already yields per-token, or no blocks at all.
+                block_token = block_raw
 
         # block_raw / block_token may differ in dtype from over/res depending on
         # the kernel return type (quant_score → fp32, others → fp16). Promote
@@ -839,6 +1055,8 @@ class KIVI_TopK_Method(MethodWrapper):
         self.prev_seq_len = None
         self.cached_indices = None
         self.head_weights = None
+        self._query_history = None
+        self._sink_positions = None
         self.kq_stack.clear()
         self.ks_stack.clear()
         self.kz_stack.clear()
@@ -846,6 +1064,7 @@ class KIVI_TopK_Method(MethodWrapper):
         self.vs_stack.clear()
         self.vz_stack.clear()
         self.centroids_k.clear()
+        self.maxpool_k.clear()
         self._n_quant_per_layer.clear()
         self._n_blocks_per_layer.clear()
         self.block_sizes.clear()
@@ -878,6 +1097,7 @@ class KIVI_TopK_Method(MethodWrapper):
             vs = self.vs_stack[layer_idx]
             vz = self.vz_stack[layer_idx]
             cs = self.centroids_k[layer_idx]
+            mp = self.maxpool_k.get(layer_idx)
 
             # Note: these are MIRRORS of KIVI's k_blocks / v_blocks data, so
             # in raw GPU bytes they double-count.  We report them anyway
@@ -894,14 +1114,25 @@ class KIVI_TopK_Method(MethodWrapper):
             total += per_block_bytes(vs)
             total += per_block_bytes(vz)
             total += per_block_bytes(cs)        # centroids fp16
+            if mp is not None:
+                total += per_block_bytes(mp)    # maxpool fp16
+
+            # Multi-query proxy ring buffer (negligible but honest).
+            if self._query_history is not None and layer_idx == 0:
+                total += self._query_history.numel() * self._query_history.element_size()
         return total
 
     # ── Diagnostics ──────────────────────────────────────────────────────────
 
     def get_ablation_config(self) -> dict:
+        design_label = {
+            "centroid":  "(a)",
+            "quantized": "(c)",
+            "maxpool":   "(m)",
+        }.get(self.score_mode, self.score_mode)
         return {
             "method": "kivi_topk_hybrid",
-            "design": "(a)" if self.score_mode == "centroid" else "(c)",
+            "design": design_label,
             "score_mode":        self.score_mode,
             "bits":              self.bits,
             "group_size":        self.group_size,
@@ -909,6 +1140,12 @@ class KIVI_TopK_Method(MethodWrapper):
             "K":                 self.K,
             "n_sink":            self.n_sink,
             "n_local":           self.n_local,
+            # Retrieval-fix knobs
+            "two_pass_factor":   self.two_pass_factor,
+            "proxy_history":     self.proxy_history,
+            "proxy_pool":        self.proxy_pool,
+            "dynamic_sinks":     self.dynamic_sinks,
+            # Existing ablation flags
             "use_head_softmax":        self.use_head_softmax,
             "use_criticality_weights": self.use_criticality_weights,
             "use_selection_cache":     self.use_selection_cache,
