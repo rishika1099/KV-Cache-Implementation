@@ -1,5 +1,5 @@
 """
-KIVI + TopK hybrid — design (a): centroid scoring on quantized blocks.
+KIVI + TopK hybrid — design (a) centroid scoring + design (c) quant-aware scoring.
 
 Combines KIVI's block-wise asymmetric quantization with TokenSelect's
 top-K attention selection. The novelty over naïve composition (KIVI →
@@ -12,41 +12,46 @@ historical cache:
     • overflow buffer (FP16, < group_size pending tokens):
         exact   Q · K_overᵀ
     • quantized blocks (4-bit / 2-bit, group_size tokens each):
-        approx  Q · centroidᵀ      ← one score per block, broadcast to
-                                     all `group_size` tokens in the block
-        centroid_b = mean(K_block, dim=seq)            (B, H, 1, D)
-
-The centroid is the FP16 block-mean computed once when the block is
-sealed (free if we already have the FP16 data; one cheap dequant + mean
-otherwise). Centroids live in a parallel list to KIVI's `k_blocks` and
-are kept in sync as new blocks are sealed during decode. This is the
-correct "design (a)" formulation — using `zero + scale · mid` only gives
-a scalar per block (scale/zero have no head_dim axis under KIVI's
-per-token reduction), which can't form a key vector for Q·Kᵀ scoring.
+        approx  Q · centroidᵀ      (design a)
+        or  exact int×fp Triton kernel on uint8 storage  (design c)
 
 After TopK selects K indices over the combined score vector, only the
-quantized blocks containing at least one selected token are dequantized
-— never the full cache. Selected (K, V) slices come from a mix of FP16
-regions and partially-dequantized blocks.
+selected tokens are dequantized — never whole blocks, never the full
+cache.
 
-The TopK selection plumbing (head soft voting, criticality weights,
-selection cache, sink + local tokens, full-cache refresh) is borrowed
-verbatim from `topk_selection.TopKMethod` so its ablation flags stay
-meaningful for the hybrid too.
+═══════════════════════════════════════════════════════════════════════════
+PERFORMANCE OPTIMIZATIONS (perf/hybrid-optimization branch)
+═══════════════════════════════════════════════════════════════════════════
+The previous reference implementation paid an O(n_unique_blocks · n_layers)
+Python-loop cost in `_materialise` (one full-block dequant per touched
+block per layer × 32 layers) which dominated decode latency.  This module
+replaces that loop with a fully vectorised single-shot gather + dequant
+that operates directly on pre-stacked uint8 tensors — one tensor op per
+layer, zero Python iteration over blocks.
 
-Design choice rationale
------------------------
-Centroid scoring trades exact attention-magnitude ranking for a ~32×
-cheaper scoring pass (one Q·k per block instead of one per token). The
-residual + overflow regions — which dominate the *recent* attention mass
-in autoregressive decoding — are scored exactly, so the approximation
-hits only the older quantized history where TopK is already throwing
-~95% of tokens away. Empirically this is the sweet spot for design (a).
-A future design (c) would replace the centroid pass with a custom
-quant-aware Triton kernel that scores and top-K's directly on packed
-4-bit data; left as a stretch goal.
+Key changes vs. v1:
+  • V-side scale/zero stacks (`vs_stack`, `vz_stack`) maintained in
+    parallel with `kq_stack` so V dequant is also a single batched op.
+  • Per-token block-id LUT (`block_id_for_quant[layer_idx]`) cached on
+    block-seal events so `bucketize` runs once per seal, not per step.
+  • Pre-allocated growable buffers for the four stacked tensors (capacity
+    grows by chunks rather than re-cat'ing every block-seal).
+  • FP16 matmul in `_score_layer` (drop unconditional `.float()`
+    upcasts; H100 fp16 tensor cores are free, fp32 cast only happens
+    around the softmax/sum reduction).
+  • Selection-cache staleness fix: `_can_reuse_cache` now invalidates
+    when seq_len has changed since the cached query, not just when
+    cosine similarity drops below threshold.
+  • Storage accounting includes hybrid scratch tensors.
+  • Optional debug profiling via `KV_HYBRID_PROFILE=1` (logs per-step
+    time_scoring / time_materialise / num_blocks_dequantized to stderr).
+═══════════════════════════════════════════════════════════════════════════
 """
 from __future__ import annotations
+
+import os
+import sys
+import time
 from typing import Dict, List, Tuple
 
 import torch
@@ -55,6 +60,17 @@ from .base import MethodWrapper
 from .kivi_quant import KIVIMethod, dequantize
 from .rope_utils import apply_rope_delta
 from .topk_kernels import quant_score
+
+
+# Debug profiling toggle. When enabled, _score_layer / _materialise time is
+# accumulated in self.stats and dumped to stderr at the end of the run.
+_DEBUG_PROFILE = os.environ.get("KV_HYBRID_PROFILE", "0") == "1"
+
+
+def _cuda_sync():
+    """Cheap CUDA sync used only when KV_HYBRID_PROFILE=1."""
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
 
 
 class KIVI_TopK_Method(MethodWrapper):
@@ -67,13 +83,12 @@ class KIVI_TopK_Method(MethodWrapper):
                   cache_similarity_threshold,
                   use_head_softmax, use_criticality_weights,
                   use_selection_cache, use_sink_tokens, use_local_tokens
-
-    The Triton fused-score kernel from `topk_kernels` is *not* used here:
-    its FP16 contract assumes a contiguous K matrix, while the hybrid's
-    middle region is split across heterogeneous sources (centroids +
-    overflow). Phase B uses the PyTorch reference path; design (c)
-    would supply a quant-aware kernel.
     """
+
+    # Pre-alloc growth chunk (in number of blocks) for the stacked buffers.
+    # Larger ⇒ fewer reallocations, more upfront memory. 64 ≈ 2K context
+    # worth of blocks at group_size=32; doubles on growth, like std::vector.
+    _CAPACITY_CHUNK = 64
 
     def __init__(
         self,
@@ -88,16 +103,12 @@ class KIVI_TopK_Method(MethodWrapper):
         refresh_interval: int = 50,
         cache_similarity_threshold: float = 0.95,
         # ── Hybrid scoring path ──
-        score_mode: str = "centroid",            # "centroid" (design a) | "quantized" (design c)
+        score_mode: str = "centroid",            # "centroid" (a) | "quantized" (c)
         # ── Position-encoding parameters (BUG-2 fix) ──
-        # Default Option B: don't re-rotate the materialised cache; the
-        # runner injects position_ids so HF rotates Q (and the new K) at
-        # the true absolute position. See methods/topk_selection.py for
-        # the full rationale and AUDIT_REPORT.md (BUG-2).
         head_dim: int = 128,
         rope_theta: float = 10000.0,
         apply_rope_correction: bool = False,
-        # ── Ablation flags (mirror TopKMethod for consistent reporting) ──
+        # ── Ablation flags ──
         use_head_softmax: bool = True,
         use_criticality_weights: bool = True,
         use_selection_cache: bool = True,
@@ -109,7 +120,6 @@ class KIVI_TopK_Method(MethodWrapper):
                 f"score_mode must be 'centroid' or 'quantized', got {score_mode!r}"
             )
         self.score_mode = score_mode
-        # Underlying KIVI cache (provides the quantized storage)
         self.kivi = KIVIMethod(
             bits=bits, residual_length=residual_length, group_size=group_size,
         )
@@ -117,52 +127,58 @@ class KIVI_TopK_Method(MethodWrapper):
         self.group_size = group_size
         self.residual_length = residual_length
 
-        # TopK parameters
         self.K = K
         self.n_sink = n_sink if use_sink_tokens else 0
         self.n_local = n_local if use_local_tokens else 0
         self.refresh_interval = refresh_interval
         self.cache_similarity_threshold = cache_similarity_threshold
 
-        # Position-encoding metadata for RoPE re-rotation on truncated layouts.
         self.head_dim = head_dim
         self.rope_theta = rope_theta
         self.apply_rope_correction = apply_rope_correction
 
-        # Ablation flags
         self.use_head_softmax        = use_head_softmax
         self.use_criticality_weights = use_criticality_weights
         self.use_selection_cache     = use_selection_cache
         self.use_sink_tokens         = use_sink_tokens
         self.use_local_tokens        = use_local_tokens
 
-        # Selection state (TopK side)
+        # Selection state
         self.step_counter = 0
         self.prev_query: torch.Tensor | None = None
+        self.prev_seq_len: int | None = None
         self.cached_indices: Dict[int, torch.Tensor] | None = None
         self.head_weights: torch.Tensor | None = None
 
-        # Per-layer pre-stacked centroid tensor of shape (B, H, n_blocks, D).
-        # We append new block centroids in-place via torch.cat once per
-        # block-seal event (paid once per block, never per step). Avoids
-        # the per-step Python loop in v1 that dominated decode latency.
-        # Aligned with self.kivi.cache[l]['k_blocks'].
-        self.centroids_k: Dict[int, torch.Tensor] = {}
-        # Also track per-layer block sizes (matches the stacked tensor's
-        # third dim by construction; cheap and lets _materialise compute
-        # cumulative offsets without repeated tensor introspection).
-        self.block_sizes: Dict[int, List[int]] = {}
-
-        # ── Design (c) state: pre-stacked uint8 K + per-token scale/zero ──
-        # Maintained in parallel with self.kivi.cache[l]['k_blocks'] when
-        # score_mode == "quantized". One stacked tensor per layer; updated
-        # on block-seal events only (not per step).
-        #   kq_stack[l]: (B, H, n_quant, D) uint8
-        #   ks_stack[l]: (B, H, n_quant, 1) fp16
-        #   kz_stack[l]: (B, H, n_quant, 1) fp16
+        # ── Stacked block state (per layer) ──
+        # K side: per-token quant ⇒ scale/zero are (B,H,group_size,1) per block,
+        #         which stack along dim=2 to (B,H,n_quant,1) ─ "per-token" scalars.
+        #         kq_stack[l]: (B,H,capacity,D) uint8
+        #         ks_stack[l]: (B,H,capacity,1) fp16
+        #         kz_stack[l]: (B,H,capacity,1) fp16
+        # V side: per-channel quant ⇒ scale/zero are (B,H,1,D) per block, which
+        #         stack along dim=2 to (B,H,n_blocks,D) ─ "per-block per-channel".
+        #         vq_stack[l]: (B,H,capacity,D) uint8
+        #         vs_stack[l]: (B,H,n_block_capacity,D) fp16
+        #         vz_stack[l]: (B,H,n_block_capacity,D) fp16
+        # Centroids (design a only): (B,H,n_block_capacity,D) fp16
         self.kq_stack: Dict[int, torch.Tensor] = {}
         self.ks_stack: Dict[int, torch.Tensor] = {}
         self.kz_stack: Dict[int, torch.Tensor] = {}
+        self.vq_stack: Dict[int, torch.Tensor] = {}
+        self.vs_stack: Dict[int, torch.Tensor] = {}
+        self.vz_stack: Dict[int, torch.Tensor] = {}
+        self.centroids_k: Dict[int, torch.Tensor] = {}
+
+        # Logical sizes (≤ capacity).
+        self._n_quant_per_layer: Dict[int, int] = {}
+        self._n_blocks_per_layer: Dict[int, int] = {}
+        # Per-layer block sizes list — needed only for the partial-first-block
+        # case from KIVI's prefill; uniform = group_size for decode-sealed.
+        self.block_sizes: Dict[int, List[int]] = {}
+        # Per-layer LUT mapping each token slot in [0, n_quant) to its block_id.
+        # Rebuilt only on _sync_block_state (block-seal events), not per step.
+        self._block_id_for_quant: Dict[int, torch.Tensor] = {}
 
         # Diagnostics
         self.stats = {
@@ -171,79 +187,152 @@ class KIVI_TopK_Method(MethodWrapper):
             "refresh_steps":        0,
             "cache_hits":            0,
             "cache_misses":          0,
-            "blocks_dequantized":    0,  # cumulative — tracks dequant volume
+            "blocks_dequantized":    0,        # cumulative legacy counter
+            # Perf counters (only populated when KV_HYBRID_PROFILE=1)
+            "time_scoring_ms":       0.0,
+            "time_materialise_ms":   0.0,
+            "time_sync_ms":          0.0,
+            "tokens_dequantized":    0,        # = n_selected_tokens in quant region
         }
+
+    # ── Buffer growth helper ────────────────────────────────────────────────
+    @staticmethod
+    def _ensure_capacity(buf: torch.Tensor, needed: int, growth: int) -> torch.Tensor:
+        """
+        Grow a stacked buffer in-place along dim=2 if its physical capacity
+        is less than `needed`. Doubles on growth (amortised O(1) per append).
+
+        We can't truly grow a torch tensor in-place; what we do instead is
+        allocate a new bigger buffer once and copy over. With `growth`
+        chunking, the cost is amortised to O(1) per block-seal event.
+        """
+        cap = buf.shape[2]
+        if cap >= needed:
+            return buf
+        new_cap = max(needed, cap * 2 if cap > 0 else growth)
+        new_shape = list(buf.shape)
+        new_shape[2] = new_cap
+        new_buf = torch.empty(new_shape, dtype=buf.dtype, device=buf.device)
+        if cap > 0:
+            new_buf[:, :, :cap, :] = buf
+        return new_buf
 
     # ── Prefill ──────────────────────────────────────────────────────────────
 
     def process_prefill(self, past_key_values, attention_weights=None):
         """
-        Build the KIVI quantized cache and (optionally) compute per-head
-        criticality weights. The model needs full FP16 K,V for the prefill
-        pass itself, so we return the dequantized reconstruction — the
-        savings kick in on subsequent decode steps.
+        Build the KIVI quantized cache and seed the stacked block state used
+        for fast scoring + selective dequantization on later decode steps.
+        Returns the FP16 reconstruction (the model needs it for the prefill
+        attention pass itself).
         """
         recon = self.kivi.process_prefill(past_key_values)
         self.step_counter = 0
         self.prev_query = None
+        self.prev_seq_len = None
         self.cached_indices = None
-        self.centroids_k = {}
-        self.block_sizes = {}
-        self.kq_stack = {}
-        self.ks_stack = {}
-        self.kz_stack = {}
 
-        # Seed per-layer scoring state from the already-quantized blocks.
-        # Centroids: one mean-pooled key per block (design a).
-        # Quant stack: stacked uint8/scale/zero across all blocks (design c).
-        # Both are paid once per block; per-step cost is one matmul / one
-        # Triton launch over the pre-stacked tensor. Partial last-block from
-        # KIVI prefill is handled identically — `block_sizes` carries the
-        # truth so downstream gather logic stays correct.
+        self.kq_stack.clear()
+        self.ks_stack.clear()
+        self.kz_stack.clear()
+        self.vq_stack.clear()
+        self.vs_stack.clear()
+        self.vz_stack.clear()
+        self.centroids_k.clear()
+        self._n_quant_per_layer.clear()
+        self._n_blocks_per_layer.clear()
+        self.block_sizes.clear()
+        self._block_id_for_quant.clear()
+
         for layer_idx, state in self.kivi.cache.items():
-            blocks = state['k_blocks']
-            v_blocks = state['v_blocks']
-            self.block_sizes[layer_idx] = [qk.shape[2] for qk, _, _ in blocks]
+            blocks_k = state['k_blocks']
+            blocks_v = state['v_blocks']
+            B, H, _, D = state['residual_k'].shape
+            dev = state['residual_k'].device
+            dtype = state['residual_k'].dtype
 
-            if blocks:
-                centroid_list = [
-                    self._block_centroid(qk, sk, zk) for qk, sk, zk in blocks
-                ]
-                self.centroids_k[layer_idx] = torch.cat(centroid_list, dim=2)
+            self.block_sizes[layer_idx] = [qk.shape[2] for qk, _, _ in blocks_k]
+            n_blocks = len(blocks_k)
+            n_quant = sum(self.block_sizes[layer_idx])
+            self._n_quant_per_layer[layer_idx] = n_quant
+            self._n_blocks_per_layer[layer_idx] = n_blocks
 
-                # Design (c) packed state — stack along seq axis so the
-                # kernel sees one contiguous (B, H, n_quant, D) uint8 tensor.
-                self.kq_stack[layer_idx] = torch.cat(
-                    [qk for qk, _, _ in blocks], dim=2,
+            # Pre-alloc capacity in chunks, sized to fit prefill plus headroom.
+            tok_cap = max(n_quant + self._CAPACITY_CHUNK * self.group_size,
+                          self._CAPACITY_CHUNK * self.group_size)
+            blk_cap = max(n_blocks + self._CAPACITY_CHUNK,
+                          self._CAPACITY_CHUNK)
+
+            self.kq_stack[layer_idx] = torch.empty(
+                (B, H, tok_cap, D), dtype=torch.uint8, device=dev,
+            )
+            self.ks_stack[layer_idx] = torch.empty(
+                (B, H, tok_cap, 1), dtype=torch.float16, device=dev,
+            )
+            self.kz_stack[layer_idx] = torch.empty(
+                (B, H, tok_cap, 1), dtype=torch.float16, device=dev,
+            )
+            self.vq_stack[layer_idx] = torch.empty(
+                (B, H, tok_cap, D), dtype=torch.uint8, device=dev,
+            )
+            self.vs_stack[layer_idx] = torch.empty(
+                (B, H, blk_cap, D), dtype=torch.float16, device=dev,
+            )
+            self.vz_stack[layer_idx] = torch.empty(
+                (B, H, blk_cap, D), dtype=torch.float16, device=dev,
+            )
+            self.centroids_k[layer_idx] = torch.empty(
+                (B, H, blk_cap, D), dtype=dtype, device=dev,
+            )
+
+            if n_blocks > 0:
+                # ── K side: cat once into the buffer ──
+                self.kq_stack[layer_idx][:, :, :n_quant, :] = torch.cat(
+                    [qk for qk, _, _ in blocks_k], dim=2,
                 )
-                self.ks_stack[layer_idx] = torch.cat(
-                    [sk for _, sk, _ in blocks], dim=2,
+                self.ks_stack[layer_idx][:, :, :n_quant, :] = torch.cat(
+                    [sk for _, sk, _ in blocks_k], dim=2,
                 )
-                self.kz_stack[layer_idx] = torch.cat(
-                    [zk for _, _, zk in blocks], dim=2,
+                self.kz_stack[layer_idx][:, :, :n_quant, :] = torch.cat(
+                    [zk for _, _, zk in blocks_k], dim=2,
+                )
+
+                # ── V side: stack uint8 along tokens, scale/zero along blocks ──
+                self.vq_stack[layer_idx][:, :, :n_quant, :] = torch.cat(
+                    [qv for qv, _, _ in blocks_v], dim=2,
+                )
+                # V scale/zero are per-block per-channel. Per-block shape is
+                # (B,H,1,D); stacking along dim=2 gives (B,H,n_blocks,D).
+                self.vs_stack[layer_idx][:, :, :n_blocks, :] = torch.cat(
+                    [sv for _, sv, _ in blocks_v], dim=2,
+                )
+                self.vz_stack[layer_idx][:, :, :n_blocks, :] = torch.cat(
+                    [zv for _, _, zv in blocks_v], dim=2,
+                )
+
+                # Centroids (one fp16 mean key per block).
+                centroids = torch.cat([
+                    self._block_centroid(qk, sk, zk)
+                    for qk, sk, zk in blocks_k
+                ], dim=2)
+                self.centroids_k[layer_idx][:, :, :n_blocks, :] = centroids
+
+                self._block_id_for_quant[layer_idx] = self._build_token_block_ids(
+                    self.block_sizes[layer_idx], dev,
                 )
             else:
-                # Empty placeholders shaped to match downstream expectations.
-                B, H, _, D = state['residual_k'].shape
-                dev = state['residual_k'].device
-                self.centroids_k[layer_idx] = torch.empty(
-                    (B, H, 0, D),
-                    dtype=state['residual_k'].dtype, device=dev,
-                )
-                self.kq_stack[layer_idx] = torch.empty(
-                    (B, H, 0, D), dtype=torch.uint8, device=dev,
-                )
-                self.ks_stack[layer_idx] = torch.empty(
-                    (B, H, 0, 1), dtype=torch.float16, device=dev,
-                )
-                self.kz_stack[layer_idx] = torch.empty(
-                    (B, H, 0, 1), dtype=torch.float16, device=dev,
+                self._block_id_for_quant[layer_idx] = torch.empty(
+                    (0,), dtype=torch.long, device=dev,
                 )
 
         if self.use_criticality_weights:
             self._compute_head_weights(recon)
         else:
             self.head_weights = None
+
+        # Pre-warm Triton kernels with a dummy launch on the actual stacked
+        # tensors so the first real decode step doesn't pay JIT compile cost.
+        self._prewarm_kernels()
 
         return recon
 
@@ -253,51 +342,133 @@ class KIVI_TopK_Method(MethodWrapper):
         deq = dequantize(qk, sk, zk)            # (B, H, group_size, D)
         return deq.mean(dim=2, keepdim=True)    # (B, H, 1, D)
 
+    @staticmethod
+    def _build_token_block_ids(block_sizes: List[int], device) -> torch.Tensor:
+        """
+        Build a (n_quant,) long tensor mapping each token slot to its block_id.
+        Called only on block-seal events; cheap.
+        """
+        if not block_sizes:
+            return torch.empty((0,), dtype=torch.long, device=device)
+        ids = torch.cat([
+            torch.full((sz,), bid, dtype=torch.long, device=device)
+            for bid, sz in enumerate(block_sizes)
+        ])
+        return ids
+
+    def _prewarm_kernels(self) -> None:
+        """
+        Trigger a no-op pass through the score/dequant path so Triton
+        compiles before the first real decode step.  Skipped silently if
+        there's no quantized state yet (e.g. very short prefills).
+        """
+        if not self.kivi.cache:
+            return
+        try:
+            layer0 = next(iter(self.kivi.cache.values()))
+            B, H, _, D = layer0['residual_k'].shape
+            dev = layer0['residual_k'].device
+            n_quant = self._n_quant_per_layer.get(0, 0)
+            if n_quant == 0:
+                return
+            dummy_q = torch.zeros((1, H, 1, D), device=dev, dtype=torch.float16)
+            kq = self.kq_stack[0][:, :, :n_quant, :]
+            ks = self.ks_stack[0][:, :, :n_quant, :]
+            kz = self.kz_stack[0][:, :, :n_quant, :]
+            if self.score_mode == "quantized" and dev.type == "cuda":
+                _ = quant_score(dummy_q, kq, ks, kz)
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+        except Exception:
+            # Pre-warm is best-effort; never fail the pipeline because of it.
+            pass
+
     def _sync_block_state(self) -> None:
         """
         Update centroid + quant-stack state when KIVI seals new blocks.
 
         Called once per process_step. The common case (no new block) hits
-        a tight fast-path. When a block has been sealed, we incrementally
-        cat the new centroid (design a) and the new uint8/scale/zero
-        slices (design c) onto their respective stacked tensors — one cat
-        per *block-seal event*, never per step.
+        a tight fast-path early-out. When blocks have been sealed, we
+        in-place write into pre-allocated buffers (growing them only when
+        capacity is exceeded).
         """
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            t0 = time.perf_counter()
+
         for layer_idx, state in self.kivi.cache.items():
-            stacked = self.centroids_k[layer_idx]
-            n_existing = stacked.shape[2]
+            n_existing = self._n_blocks_per_layer.get(layer_idx, 0)
             n_total = len(state['k_blocks'])
             if n_total <= n_existing:
-                continue       # No new block this step; common case → fast path
+                continue       # No new block this step → fast path
 
-            new_blocks = state['k_blocks'][n_existing:n_total]
+            new_blocks_k = state['k_blocks'][n_existing:n_total]
+            new_blocks_v = state['v_blocks'][n_existing:n_total]
+            new_token_count = sum(qk.shape[2] for qk, _, _ in new_blocks_k)
+            old_n_quant = self._n_quant_per_layer.get(layer_idx, 0)
+            new_n_quant = old_n_quant + new_token_count
+            new_n_blocks = n_total
 
-            # Centroids
-            new_centroids = [self._block_centroid(qk, sk, zk)
-                             for qk, sk, zk in new_blocks]
-            self.centroids_k[layer_idx] = torch.cat(
-                [stacked] + new_centroids, dim=2,
-            )
+            # ── Grow buffers if needed ──
+            grow_tok = self._CAPACITY_CHUNK * self.group_size
+            grow_blk = self._CAPACITY_CHUNK
+            self.kq_stack[layer_idx] = self._ensure_capacity(
+                self.kq_stack[layer_idx], new_n_quant, grow_tok)
+            self.ks_stack[layer_idx] = self._ensure_capacity(
+                self.ks_stack[layer_idx], new_n_quant, grow_tok)
+            self.kz_stack[layer_idx] = self._ensure_capacity(
+                self.kz_stack[layer_idx], new_n_quant, grow_tok)
+            self.vq_stack[layer_idx] = self._ensure_capacity(
+                self.vq_stack[layer_idx], new_n_quant, grow_tok)
+            self.vs_stack[layer_idx] = self._ensure_capacity(
+                self.vs_stack[layer_idx], new_n_blocks, grow_blk)
+            self.vz_stack[layer_idx] = self._ensure_capacity(
+                self.vz_stack[layer_idx], new_n_blocks, grow_blk)
+            self.centroids_k[layer_idx] = self._ensure_capacity(
+                self.centroids_k[layer_idx], new_n_blocks, grow_blk)
 
-            # Quant-stack (only maintained when needed but cheap to keep current)
-            self.kq_stack[layer_idx] = torch.cat(
-                [self.kq_stack[layer_idx]] + [qk for qk, _, _ in new_blocks],
-                dim=2,
-            )
-            self.ks_stack[layer_idx] = torch.cat(
-                [self.ks_stack[layer_idx]] + [sk for _, sk, _ in new_blocks],
-                dim=2,
-            )
-            self.kz_stack[layer_idx] = torch.cat(
-                [self.kz_stack[layer_idx]] + [zk for _, _, zk in new_blocks],
-                dim=2,
-            )
+            # ── Append new K-side data ──
+            cursor_tok = old_n_quant
+            for (qk, sk, zk) in new_blocks_k:
+                bs = qk.shape[2]
+                self.kq_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = qk
+                self.ks_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = sk
+                self.kz_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = zk
+                # Centroid for this block
+                self.centroids_k[layer_idx][
+                    :, :, n_existing + (cursor_tok - old_n_quant) // self.group_size, :
+                ] = self._block_centroid(qk, sk, zk).squeeze(2)
+                cursor_tok += bs
 
-            # Block sizes track all sealed blocks regardless of mode.
-            for qk, _, _ in new_blocks:
+            # ── Append new V-side data ──
+            cursor_tok = old_n_quant
+            cursor_blk = n_existing
+            for (qv, sv, zv) in new_blocks_v:
+                bs = qv.shape[2]
+                self.vq_stack[layer_idx][:, :, cursor_tok:cursor_tok+bs, :] = qv
+                # sv,zv: (B,H,1,D) → write into block slot
+                self.vs_stack[layer_idx][:, :, cursor_blk:cursor_blk+1, :] = sv
+                self.vz_stack[layer_idx][:, :, cursor_blk:cursor_blk+1, :] = zv
+                cursor_tok += bs
+                cursor_blk += 1
+
+            # Bookkeeping
+            for (qk, _, _) in new_blocks_k:
                 self.block_sizes[layer_idx].append(qk.shape[2])
+            self._n_quant_per_layer[layer_idx] = new_n_quant
+            self._n_blocks_per_layer[layer_idx] = new_n_blocks
 
-    # Back-compat alias — old name was a single-purpose centroid sync.
+            # Rebuild token→block_id LUT (only on seal events).
+            self._block_id_for_quant[layer_idx] = self._build_token_block_ids(
+                self.block_sizes[layer_idx],
+                self.kq_stack[layer_idx].device,
+            )
+
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            self.stats["time_sync_ms"] += (time.perf_counter() - t0) * 1000.0
+
+    # Back-compat alias.
     _sync_centroids = _sync_block_state
 
     def _compute_head_weights(self, past_key_values):
@@ -323,70 +494,61 @@ class KIVI_TopK_Method(MethodWrapper):
     # ── Decode step ──────────────────────────────────────────────────────────
 
     def process_step(self, past_key_values, step, attention_weights=None):
-        """
-        Hybrid decode step.
-
-        Phase 1 — update KIVI cache state (append new token; possibly
-                  evict to overflow; possibly seal a new quantized block).
-        Phase 2 — score Q against the *quantized* state (centroids for
-                  blocks, exact for overflow + residual).
-        Phase 3 — top-K over combined scores; merge with sink + local.
-        Phase 4 — gather selected slice: dequantize only the blocks that
-                  contain at least one selected token.
-        """
-        # Phase 1: KIVI ingests new tokens but we discard its FP16 return —
-        # we never need the full reconstruction.
+        """Hybrid decode step. See module docstring for the four phases."""
+        # Phase 1: KIVI ingests new tokens; we ignore its FP16 reconstruction.
         self.kivi.process_step(past_key_values, step)
         self._sync_block_state()
         self.step_counter += 1
         self.stats["decode_steps"] += 1
 
-        # Total context length per layer (same across layers).
-        # Block sizes can vary — KIVI's prefill produces a partial final
-        # block when historical_len % group_size ≠ 0. Decode-sealed
-        # blocks are always full group_size.
         layer0 = self.kivi.cache[0]
-        block_sizes = [qk.shape[2] for qk, _, _ in layer0['k_blocks']]
-        n_blocks      = len(block_sizes)
-        n_quant       = sum(block_sizes)
+        n_quant       = self._n_quant_per_layer.get(0, 0)
         n_overflow    = layer0['overflow_k'].shape[2]
         n_residual    = layer0['residual_k'].shape[2]
-        seq_len = n_quant + n_overflow + n_residual
-        total_budget = self.n_sink + self.K + self.n_local
+        seq_len       = n_quant + n_overflow + n_residual
+        n_blocks      = self._n_blocks_per_layer.get(0, 0)
+        total_budget  = self.n_sink + self.K + self.n_local
 
-        # Cache small enough → return full reconstruction (Novelty 13)
+        # Cache small enough → return full reconstruction.
         if seq_len <= total_budget:
             self.stats["full_attention_steps"] += 1
             return self._reconstruct_full()
 
-        # Periodic refresh — invalidate selection cache, return full cache.
-        # BUG-12 fix: skip step==0 (see topk_selection.py for the same fix).
+        # Periodic refresh.
         if (self.refresh_interval > 0
                 and step > 0
                 and step % self.refresh_interval == 0):
             self.prev_query = None
+            self.prev_seq_len = None
             self.cached_indices = None
             self.stats["refresh_steps"] += 1
             return self._reconstruct_full()
 
-        # Query proxy: last token's K from the input past_kv (FP16 view)
         proxy_q = past_key_values[-1][0][:, :, -1:, :]      # (B, H, 1, D)
 
-        # Selection cache lookup (Novelty 5, 11)
-        if self._can_reuse_cache(proxy_q):
+        # Selection cache lookup (now also seq_len-aware — see _can_reuse_cache).
+        if self._can_reuse_cache(proxy_q, seq_len):
             self.stats["cache_hits"] += 1
             return self._gather_selected(self.cached_indices)
 
         self.stats["cache_misses"] += 1
 
-        # Phase 2 + 3: hybrid scoring + top-K (per-layer indices stored)
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            t0 = time.perf_counter()
+
         per_layer_idx = self._hybrid_select(
             proxy_q, n_blocks, n_overflow, n_residual, seq_len,
         )
+
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            self.stats["time_scoring_ms"] += (time.perf_counter() - t0) * 1000.0
+
         self.prev_query = proxy_q.detach().clone()
+        self.prev_seq_len = seq_len
         self.cached_indices = per_layer_idx
 
-        # Phase 4
         return self._gather_selected(per_layer_idx)
 
     # ── Hybrid scoring + selection ───────────────────────────────────────────
@@ -396,15 +558,7 @@ class KIVI_TopK_Method(MethodWrapper):
         proxy_q: torch.Tensor,
         n_blocks: int, n_overflow: int, n_residual: int, seq_len: int,
     ) -> Dict[int, torch.Tensor]:
-        """
-        Score on quantized state, return {layer_idx: indices (S_sel,)}.
-
-        Scoring is Q-from-the-last-layer (proxy) against each layer's K —
-        this is consistent with `TopKMethod._paged_token_selection` which
-        also uses a single proxy query across layers. Per-layer scoring
-        would be more accurate but ~32× more expensive; the proxy is an
-        established TokenSelect approximation.
-        """
+        """Score on quantized state, return {layer_idx: indices (S_sel,)}."""
         device = proxy_q.device
         sink_end = min(self.n_sink, seq_len) if self.use_sink_tokens else 0
         recent_start = max(
@@ -419,15 +573,12 @@ class KIVI_TopK_Method(MethodWrapper):
             base_idx = torch.cat([sink_idx, recent_idx]).unique().sort().values
             return {l: base_idx for l in self.kivi.cache}
 
-        # Score per layer (centroids are layer-specific so we can't share)
         per_layer_idx: Dict[int, torch.Tensor] = {}
         for layer_idx, state in self.kivi.cache.items():
             scores = self._score_layer(
                 layer_idx, proxy_q, state,
                 n_blocks, n_overflow, n_residual,
             )                                                # (seq_len,)
-            # Mask out sink + recent regions so they aren't double-counted
-            # in the top-K (they're added back unconditionally below).
             scores[:sink_end] = float("-inf")
             scores[recent_start:] = float("-inf")
 
@@ -447,75 +598,75 @@ class KIVI_TopK_Method(MethodWrapper):
         n_blocks: int, n_overflow: int, n_residual: int,
     ) -> torch.Tensor:
         """
-        Compute a (seq_len,) score vector for one layer's cache.
+        Compute a (seq_len,) score vector for one layer.
 
-        Layout (must match the gather order used elsewhere):
-          [block_0 (group_size tokens), block_1, ..., block_{n_blocks-1},
-           overflow_0, ..., overflow_{n_overflow-1},
-           residual_0, ..., residual_{n_residual-1}]
+        Layout (must match the gather order):
+            [block_0..block_{n_blocks-1} (n_quant tokens),
+             overflow_0..overflow_{n_overflow-1},
+             residual_0..residual_{n_residual-1}]
         """
         head_dim = proxy_q.shape[-1]
         scale_factor = head_dim ** 0.5
         H = proxy_q.shape[1]
+        n_quant = self._n_quant_per_layer.get(layer_idx, 0)
 
-        # ── Block region scoring ──
-        # Two interchangeable paths, selected at construction:
-        #   "centroid"  — design (a): one Q · centroid per block, broadcast
-        #   "quantized" — design (c): score directly on uint8 K via Triton
-        #                 kernel (per-token resolution, no centroid approx)
+        # ── Block region scoring (centroid or quant kernel) ──
         if self.score_mode == "centroid":
-            centroid_k = self.centroids_k[layer_idx]            # (B,H,n_blocks,D)
-            if centroid_k.shape[2] > 0:
+            # FP16 matmul on H100 is free; only cast the final scores when
+            # we softmax+sum to fp32 for cross-head reduction stability.
+            if n_blocks > 0:
+                centroid_k = self.centroids_k[layer_idx][:, :, :n_blocks, :]
+                # (1,H,1,D) @ (B,H,D,n_blocks) → (1,H,1,n_blocks) → (H, n_blocks)
                 block_raw = torch.matmul(
-                    proxy_q.float(), centroid_k.float().transpose(-2, -1)
-                ).squeeze(2).squeeze(0) / scale_factor          # (H, n_blocks)
+                    proxy_q, centroid_k.transpose(-2, -1)
+                ).squeeze(2).squeeze(0) / scale_factor
             else:
                 block_raw = proxy_q.new_zeros((H, 0))
         else:  # "quantized"
-            kq = self.kq_stack[layer_idx]                       # (B,H,n_quant,D) uint8
-            if kq.shape[2] > 0:
-                # quant_score returns (H, n_quant) raw scaled-dot-product
-                # scores already divided by √d. Per-token resolution means
-                # no broadcast / repeat_interleave needed below.
-                block_raw = quant_score(
-                    proxy_q,
-                    kq,
-                    self.ks_stack[layer_idx],
-                    self.kz_stack[layer_idx],
-                )                                               # (H, n_quant)
+            if n_quant > 0:
+                kq = self.kq_stack[layer_idx][:, :, :n_quant, :]
+                ks = self.ks_stack[layer_idx][:, :, :n_quant, :]
+                kz = self.kz_stack[layer_idx][:, :, :n_quant, :]
+                block_raw = quant_score(proxy_q, kq, ks, kz)        # (H, n_quant)
             else:
                 block_raw = proxy_q.new_zeros((H, 0))
 
-        # ── Overflow (exact FP16) ──
+        # ── Overflow (exact) ──
         if n_overflow > 0:
             over_raw = torch.matmul(
-                proxy_q.float(), state['overflow_k'].float().transpose(-2, -1)
+                proxy_q, state['overflow_k'].transpose(-2, -1)
             ).squeeze(2).squeeze(0) / scale_factor              # (H, n_overflow)
         else:
             over_raw = proxy_q.new_zeros((H, 0))
 
-        # ── Residual (exact FP16) ──
+        # ── Residual (exact) ──
         if n_residual > 0:
             res_raw = torch.matmul(
-                proxy_q.float(), state['residual_k'].float().transpose(-2, -1)
+                proxy_q, state['residual_k'].transpose(-2, -1)
             ).squeeze(2).squeeze(0) / scale_factor              # (H, n_residual)
         else:
             res_raw = proxy_q.new_zeros((H, 0))
 
         # ── Concat in cache order ──
-        # Centroid mode: block_raw is (H, n_blocks) — broadcast to tokens.
-        # Quantized mode: block_raw is already (H, n_quant) per-token.
         if self.score_mode == "centroid" and n_blocks > 0:
-            block_sizes = torch.tensor(
-                [qk.shape[2] for qk, _, _ in state['k_blocks']],
-                device=block_raw.device,
-            )
-            block_token = block_raw.repeat_interleave(block_sizes, dim=1)
+            # Use the cached per-token block-id LUT to expand block scores
+            # to per-token scores. `index_select` is faster than
+            # `repeat_interleave` and works with our cached long tensor.
+            block_ids = self._block_id_for_quant[layer_idx]
+            block_token = block_raw.index_select(1, block_ids)  # (H, n_quant)
         else:
             block_token = block_raw
+
+        # block_raw / block_token may differ in dtype from over/res depending on
+        # the kernel return type (quant_score → fp32, others → fp16). Promote
+        # everything to a common dtype for the cat.
+        common = torch.float32
+        block_token = block_token.to(common)
+        over_raw    = over_raw.to(common)
+        res_raw     = res_raw.to(common)
         full = torch.cat([block_token, over_raw, res_raw], dim=1)   # (H, seq_len)
 
-        # ── Head soft voting + criticality (Novelty 3, 4, 10) ──
+        # ── Head soft voting + criticality ──
         if self.use_head_softmax:
             normalized = torch.softmax(full, dim=-1)
         else:
@@ -526,133 +677,112 @@ class KIVI_TopK_Method(MethodWrapper):
 
         return normalized.sum(dim=0)                                # (seq_len,)
 
-    # ── Selected-slice gather (with selective dequantization) ───────────────
+    # ── Selected-slice gather (vectorised selective dequant) ───────────────
 
-    def _gather_selected(
-        self, per_layer_idx,
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
-        """
-        Build the (B, H, K_sel, D) past_kv to return to the model by
-        materialising only the selected positions. Quantized blocks are
-        dequantized lazily — at most one dequant per block per call.
+    def _gather_selected(self, per_layer_idx) -> Tuple[Tuple[torch.Tensor, torch.Tensor], ...]:
+        """Build (B,H,K_sel,D) per-layer past_kv via single-shot dequant."""
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            t0 = time.perf_counter()
 
-        `per_layer_idx` is either a dict {layer_idx: indices} or a
-        single 1-D tensor shared across layers.
-        """
         result = []
-        shared = (
-            isinstance(per_layer_idx, torch.Tensor) or
-            (isinstance(per_layer_idx, dict) and len(set(
-                id(v) for v in per_layer_idx.values()
-            )) == 1)
-        )
-
         for layer_idx, state in self.kivi.cache.items():
             idx = (per_layer_idx if isinstance(per_layer_idx, torch.Tensor)
                    else per_layer_idx[layer_idx])
-            sel_k, sel_v = self._materialise(state, idx)
+            sel_k, sel_v = self._materialise(layer_idx, state, idx)
             result.append((sel_k, sel_v))
+
+        if _DEBUG_PROFILE:
+            _cuda_sync()
+            self.stats["time_materialise_ms"] += (time.perf_counter() - t0) * 1000.0
         return tuple(result)
 
     def _materialise(
-        self, state: dict, idx: torch.Tensor,
+        self, layer_idx: int, state: dict, idx: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Selectively dequantize and gather one layer's selected (K, V).
+        Selectively dequantize and gather one layer's (K, V).
 
-        Splits `idx` into three regions by the cache layout, dequantizes
-        only the unique blocks touched by quantized-region indices, then
-        gathers and concatenates in original-position order.
-
-        Uses per-block cumulative offsets (not idx // group_size) because
-        KIVI's prefill can produce a partial final block.
+        Vectorised single-shot path:  given the global indices of the selected
+        tokens, gather their uint8 K/V slices and per-token (K) / per-block (V)
+        scale/zero from the pre-stacked buffers, then run one fp16 multiply-add
+        to produce the final K/V.  No Python loop over blocks; no full-block
+        dequantization.
         """
-        n_blocks  = len(state['k_blocks'])
-        block_sizes = [qk.shape[2] for qk, _, _ in state['k_blocks']]
-        n_quant   = sum(block_sizes)
-        n_over    = state['overflow_k'].shape[2]
-        n_res     = state['residual_k'].shape[2]
+        n_quant = self._n_quant_per_layer.get(layer_idx, 0)
+        n_over  = state['overflow_k'].shape[2]
+        n_res   = state['residual_k'].shape[2]
 
-        device = idx.device
-        in_quant = idx < n_quant
-        in_over  = (idx >= n_quant) & (idx < n_quant + n_over)
-        in_res   = idx >= n_quant + n_over
+        in_quant_mask = idx < n_quant
+        in_over_mask  = (idx >= n_quant) & (idx < n_quant + n_over)
+        in_res_mask   = idx >= n_quant + n_over
 
         pieces_k: List[torch.Tensor] = []
         pieces_v: List[torch.Tensor] = []
-        positions: List[torch.Tensor] = []   # where in `idx` each piece came from
+        positions: List[torch.Tensor] = []
 
-        # ── Quantized region: dequantize touched blocks only ──
-        if in_quant.any():
-            quant_idx = idx[in_quant]                              # global pos
-            # Compute (block_id, within) via cumulative block-size offsets.
-            offsets = torch.tensor(
-                [0] + list(__import__("itertools").accumulate(block_sizes)),
-                device=device, dtype=torch.long,
+        # ── Quantized region: SINGLE batched gather + dequant ──
+        if in_quant_mask.any():
+            quant_idx = idx[in_quant_mask]                          # (S_q,)
+            n_sel = quant_idx.shape[0]
+
+            # K side: per-token scale/zero (B,H,n_quant,1) → gather along dim=2.
+            kq = self.kq_stack[layer_idx][:, :, :n_quant, :]
+            ks = self.ks_stack[layer_idx][:, :, :n_quant, :]
+            kz = self.kz_stack[layer_idx][:, :, :n_quant, :]
+            sel_qk = kq.index_select(2, quant_idx)                  # (B,H,S_q,D) uint8
+            sel_sk = ks.index_select(2, quant_idx)                  # (B,H,S_q,1) fp16
+            sel_zk = kz.index_select(2, quant_idx)                  # (B,H,S_q,1) fp16
+            sel_k_quant = sel_qk.to(torch.float16) * sel_sk + sel_zk
+
+            # V side: per-block-per-channel scale/zero (B,H,n_blocks,D).
+            # Need block_id for each selected token to index into vs/vz_stack.
+            block_ids = self._block_id_for_quant[layer_idx].index_select(0, quant_idx)
+            vq = self.vq_stack[layer_idx][:, :, :n_quant, :]
+            n_blocks = self._n_blocks_per_layer[layer_idx]
+            vs = self.vs_stack[layer_idx][:, :, :n_blocks, :]
+            vz = self.vz_stack[layer_idx][:, :, :n_blocks, :]
+            sel_qv = vq.index_select(2, quant_idx)                  # (B,H,S_q,D) uint8
+            sel_sv = vs.index_select(2, block_ids)                  # (B,H,S_q,D) fp16
+            sel_zv = vz.index_select(2, block_ids)                  # (B,H,S_q,D) fp16
+            sel_v_quant = sel_qv.to(torch.float16) * sel_sv + sel_zv
+
+            pieces_k.append(sel_k_quant)
+            pieces_v.append(sel_v_quant)
+            positions.append(in_quant_mask.nonzero(as_tuple=False).squeeze(1))
+
+            # Bookkeeping (legacy counter kept for backward compat reporting)
+            self.stats["tokens_dequantized"] += n_sel
+            self.stats["blocks_dequantized"] += int(
+                torch.unique(block_ids).numel()
             )
-            # bucketize against block END boundaries with right=True so
-            # idx == offsets[i] maps to block i (start of next block).
-            block_id = torch.bucketize(quant_idx, offsets[1:], right=True).long()
-            within   = (quant_idx - offsets[block_id]).long()
-            unique_blocks = torch.unique(block_id).tolist()
-
-            # Dequantize each touched block once and gather from it.
-            B = state['residual_k'].shape[0]
-            H = state['residual_k'].shape[1]
-            D = state['residual_k'].shape[3]
-            sel_qk = torch.empty(
-                (B, H, quant_idx.shape[0], D),
-                dtype=torch.float16, device=device,
-            )
-            sel_qv = torch.empty_like(sel_qk)
-
-            for b in unique_blocks:
-                qk, sk, zk = state['k_blocks'][b]
-                qv, sv, zv = state['v_blocks'][b]
-                deq_k = dequantize(qk, sk, zk)                  # (B,H,group,D)
-                deq_v = dequantize(qv, sv, zv)
-                mask  = (block_id == b)
-                local = within[mask]
-                sel_qk[:, :, mask, :] = deq_k[:, :, local, :]
-                sel_qv[:, :, mask, :] = deq_v[:, :, local, :]
-                self.stats["blocks_dequantized"] += 1
-
-            pieces_k.append(sel_qk); pieces_v.append(sel_qv)
-            positions.append(in_quant.nonzero(as_tuple=False).squeeze(1))
 
         # ── Overflow region: FP16 gather ──
-        if in_over.any():
-            over_idx = idx[in_over] - n_quant
-            pieces_k.append(state['overflow_k'][:, :, over_idx, :])
-            pieces_v.append(state['overflow_v'][:, :, over_idx, :])
-            positions.append(in_over.nonzero(as_tuple=False).squeeze(1))
+        if in_over_mask.any():
+            over_idx = idx[in_over_mask] - n_quant
+            pieces_k.append(state['overflow_k'].index_select(2, over_idx))
+            pieces_v.append(state['overflow_v'].index_select(2, over_idx))
+            positions.append(in_over_mask.nonzero(as_tuple=False).squeeze(1))
 
         # ── Residual region: FP16 gather ──
-        if in_res.any():
-            res_idx = idx[in_res] - n_quant - n_over
-            pieces_k.append(state['residual_k'][:, :, res_idx, :])
-            pieces_v.append(state['residual_v'][:, :, res_idx, :])
-            positions.append(in_res.nonzero(as_tuple=False).squeeze(1))
+        if in_res_mask.any():
+            res_idx = idx[in_res_mask] - n_quant - n_over
+            pieces_k.append(state['residual_k'].index_select(2, res_idx))
+            pieces_v.append(state['residual_v'].index_select(2, res_idx))
+            positions.append(in_res_mask.nonzero(as_tuple=False).squeeze(1))
 
-        # Assemble in the original idx order so positional info matches `idx`.
+        # Assemble in original idx order so positional info matches `idx`.
         out_k = torch.cat(pieces_k, dim=2)
         out_v = torch.cat(pieces_v, dim=2)
         order = torch.cat(positions).argsort()
-        out_k = out_k[:, :, order, :]
-        out_v = out_v[:, :, order, :]
+        out_k = out_k.index_select(2, order)
+        out_v = out_v.index_select(2, order)
 
-        # BUG-2 fix — constant-shift RoPE re-rotation.
-        # See TopKMethod._gather_layer for the derivation. Total layer length
-        # before gather is ``n_quant + n_over + n_res`` (the layer's S_full).
-        # Each gathered key gets the *same* delta = S_sel - S_full so that
-        # all pair-wise RoPE relative offsets — Q-to-K and K-to-K — are
-        # preserved. A per-token delta of slot_i - orig_pos_i would compact
-        # the layout and *change* the relative offsets, which is what
-        # produced 0% passkey accuracy in the first attempt.
+        # Optional RoPE re-rotation (Option A escape hatch — disabled by default).
         if self.apply_rope_correction:
             S_full = n_quant + n_over + n_res
             S_sel = out_k.shape[2]
-            shift = S_sel - S_full                         # ≤ 0 for truncation
+            shift = S_sel - S_full
             delta = torch.full((S_sel,), float(shift),
                                dtype=torch.float32, device=out_k.device)
             out_k = apply_rope_delta(out_k, delta, rope_theta=self.rope_theta)
@@ -676,12 +806,24 @@ class KIVI_TopK_Method(MethodWrapper):
                            torch.cat(parts_v, dim=2)))
         return tuple(result)
 
-    # ── Selection cache (cosine-similarity reuse, Novelty 5/11) ─────────────
+    # ── Selection cache (cosine similarity + seq_len) ───────────────────────
 
-    def _can_reuse_cache(self, current_query: torch.Tensor) -> bool:
+    def _can_reuse_cache(self, current_query: torch.Tensor, current_seq_len: int) -> bool:
+        """
+        Can we reuse the previously-cached selection?
+
+        v2 fix: also invalidate when seq_len has changed since the cached
+        query was scored. Without this guard, freshly-appended tokens would
+        not appear in the sparse cache returned to the model — silent
+        correctness bug for long generations / step-by-step PPL.
+        """
         if not self.use_selection_cache:
             return False
-        if self.prev_query is None or self.cached_indices is None:
+        if (self.prev_query is None
+                or self.cached_indices is None
+                or self.prev_seq_len is None):
+            return False
+        if current_seq_len != self.prev_seq_len:
             return False
         q_curr = current_query.squeeze(2).float()
         q_prev = self.prev_query.squeeze(2).float()
@@ -694,19 +836,65 @@ class KIVI_TopK_Method(MethodWrapper):
         self.kivi.reset()
         self.step_counter = 0
         self.prev_query = None
+        self.prev_seq_len = None
         self.cached_indices = None
         self.head_weights = None
-        self.centroids_k = {}
-        self.block_sizes = {}
-        self.kq_stack = {}
-        self.ks_stack = {}
-        self.kz_stack = {}
-        for k in self.stats:
-            self.stats[k] = 0
+        self.kq_stack.clear()
+        self.ks_stack.clear()
+        self.kz_stack.clear()
+        self.vq_stack.clear()
+        self.vs_stack.clear()
+        self.vz_stack.clear()
+        self.centroids_k.clear()
+        self._n_quant_per_layer.clear()
+        self._n_blocks_per_layer.clear()
+        self.block_sizes.clear()
+        self._block_id_for_quant.clear()
+        # Preserve perf counter keys but zero them.
+        for k in list(self.stats.keys()):
+            self.stats[k] = 0 if not isinstance(self.stats[k], float) else 0.0
 
     def get_kv_size_bytes(self, past_key_values):
-        """Storage = KIVI's quantized footprint (the hybrid adds no storage)."""
-        return self.kivi.get_kv_size_bytes(past_key_values)
+        """
+        Storage = KIVI compressed state + hybrid scratch tensors actually
+        held in GPU memory during decode.
+
+        v2: previously delegated entirely to KIVI, undercounting the parallel
+        kq_stack / ks_stack / kz_stack / vq_stack / vs_stack / vz_stack /
+        centroids_k buffers by ~2x.  Now we count them at their *logical*
+        size (n_quant or n_blocks slots, not their pre-allocated capacity)
+        so the number tracks what the algorithm actually needs.
+        """
+        total = self.kivi.get_kv_size_bytes(past_key_values)
+
+        for layer_idx in self.kq_stack:
+            n_quant  = self._n_quant_per_layer.get(layer_idx, 0)
+            n_blocks = self._n_blocks_per_layer.get(layer_idx, 0)
+
+            kq = self.kq_stack[layer_idx]
+            ks = self.ks_stack[layer_idx]
+            kz = self.kz_stack[layer_idx]
+            vq = self.vq_stack[layer_idx]
+            vs = self.vs_stack[layer_idx]
+            vz = self.vz_stack[layer_idx]
+            cs = self.centroids_k[layer_idx]
+
+            # Note: these are MIRRORS of KIVI's k_blocks / v_blocks data, so
+            # in raw GPU bytes they double-count.  We report them anyway
+            # because the GPU does hold both (KIVI's per-block list of
+            # tensors *and* our stacked buffers).  The fp16 baseline number
+            # remains the apples-to-apples comparison.
+            B, H, _, D = kq.shape
+            per_token_bytes = lambda t: B * H * n_quant * t.shape[-1] * t.element_size()
+            per_block_bytes = lambda t: B * H * n_blocks * t.shape[-1] * t.element_size()
+            total += per_token_bytes(kq)        # uint8 mirror of K
+            total += B * H * n_quant * 1 * ks.element_size()
+            total += B * H * n_quant * 1 * kz.element_size()
+            total += per_token_bytes(vq)        # uint8 mirror of V
+            total += per_block_bytes(vs)
+            total += per_block_bytes(vz)
+            total += per_block_bytes(cs)        # centroids fp16
+        return total
 
     # ── Diagnostics ──────────────────────────────────────────────────────────
 
@@ -734,13 +922,22 @@ class KIVI_TopK_Method(MethodWrapper):
         s["cache_hit_rate"] = (
             s["cache_hits"] / scoring if scoring > 0 else 0.0
         )
+        if _DEBUG_PROFILE and s["decode_steps"] > 0:
+            n = s["decode_steps"]
+            sys.stderr.write(
+                f"[hybrid-perf] steps={n}  "
+                f"score={s['time_scoring_ms']/n:.3f}ms  "
+                f"materialise={s['time_materialise_ms']/n:.3f}ms  "
+                f"sync={s['time_sync_ms']/n:.3f}ms  "
+                f"avg_tokens_dequant={s['tokens_dequantized']/max(n,1):.1f}\n"
+            )
         return s
 
 
 if __name__ == "__main__":
-    import sys
+    import sys as _sys
     from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    _sys.path.insert(0, str(Path(__file__).parent.parent))
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from benchmark.runner import generate_with_method
