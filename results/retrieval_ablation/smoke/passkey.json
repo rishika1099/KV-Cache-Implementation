@@ -1,0 +1,18 @@
+[
+  {
+    "experiment": "passkey_retrieval",
+    "method": "kivi_topk_all",
+    "notes": "",
+    "cfg.seq_len": 4096,
+    "cfg.depth": 0.5,
+    "cfg.K": 1024,
+    "cfg.n_sink": 128,
+    "cfg.n_local": 512,
+    "cfg.bits": 4,
+    "cfg.n_trials": 1,
+    "m.accuracy": 0.0,
+    "m.n_correct": 0,
+    "m.n_trials": 1,
+    "m.throughput_tps": 2.971176550913703
+  }
+]

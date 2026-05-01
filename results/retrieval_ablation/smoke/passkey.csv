@@ -1,0 +1,2 @@
+experiment,method,notes,cfg.seq_len,cfg.depth,cfg.K,cfg.n_sink,cfg.n_local,cfg.bits,cfg.n_trials,m.accuracy,m.n_correct,m.n_trials,m.throughput_tps
+passkey_retrieval,kivi_topk_all,,4096,0.5,1024,128,512,4,1,0.0,0,1,2.971176550913703

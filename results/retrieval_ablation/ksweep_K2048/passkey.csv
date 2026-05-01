@@ -1,0 +1,6 @@
+experiment,method,notes,cfg.seq_len,cfg.depth,cfg.K,cfg.n_sink,cfg.n_local,cfg.bits,cfg.n_trials,m.accuracy,m.n_correct,m.n_trials,m.throughput_tps
+passkey_retrieval,kivi_topk,,4096,0.1,2048,128,512,4,5,1.0,5,5,3.3481867384842103
+passkey_retrieval,kivi_topk,,4096,0.3,2048,128,512,4,5,1.0,5,5,3.507020832911509
+passkey_retrieval,kivi_topk,,4096,0.5,2048,128,512,4,5,1.0,5,5,3.3843888977422467
+passkey_retrieval,kivi_topk,,4096,0.7,2048,128,512,4,5,0.0,0,5,3.3816898159019573
+passkey_retrieval,kivi_topk,,4096,0.9,2048,128,512,4,5,1.0,5,5,3.4000836073695333
