@@ -247,6 +247,52 @@ def run_ksweep():
             "out_dir": str(RESULTS_PATH / RESULTS_SUBDIR)}
 
 
+@gpu_function("retrieval_ctx_ksweep", timeout=18000, memory=65536)
+def run_ctx_ksweep(seq_len: int, K_values: list):
+    """K-sweep on `kivi_topk` at a single seq_len. One model load, N K-values."""
+    _bootstrap()
+    from experiments.passkey_retrieval import run_passkey_retrieval
+
+    all_records = []
+    for K in K_values:
+        out_dir = (RESULTS_PATH / RESULTS_SUBDIR
+                   / f"ctx_ksweep_S{seq_len}_K{K}")
+        records = run_passkey_retrieval(
+            model_name="meta-llama/Llama-2-7b-hf",
+            seq_lens=[seq_len],
+            methods=["kivi_topk"],
+            n_trials=5, n_depths=5,
+            K=K, n_sink=128, n_local=512,
+            bits=4, group_size=32, residual_length=128,
+            max_new_tokens=12,
+            seed=0, device="cuda", output_dir=out_dir,
+        )
+        all_records.extend(records)
+    results_vol.commit()
+
+    _log_to_wandb(
+        run_name=f"ctx_ksweep_S{seq_len}",
+        records=all_records,
+        tags=["ctx_ksweep", f"seq_len={seq_len}"],
+        config={"mode": "ctx_ksweep", "model": "Llama-2-7b-hf",
+                "seq_len": seq_len,
+                "K_values": K_values,
+                "n_sink": 128, "n_local": 512,
+                "n_trials": 5, "n_depths": 5},
+    )
+    return {"n_rows": len(all_records), "seq_len": seq_len,
+            "out_dir": str(RESULTS_PATH / RESULTS_SUBDIR)}
+
+
+# Per-context K grids. Skip K values that are >= seq_len (would just be
+# full-attention selection over the whole prompt).
+_CTX_GRID = {
+     8192: [1024, 2048, 3072, 4096, 6144],
+    16384: [1024, 2048, 4096, 6144, 8192, 12288],
+    32768: [1024, 2048, 4096, 8192, 12288, 16384, 24576],
+}
+
+
 @app.local_entrypoint()
 def main(mode: str = "smoke"):
     if mode == "smoke":
@@ -258,6 +304,16 @@ def main(mode: str = "smoke"):
     elif mode == "ksweep":
         res = run_ksweep.remote()
         print(f"ksweep: {res}")
+    elif mode == "ctx_ksweep":
+        handles = [
+            (s, run_ctx_ksweep.spawn(s, ks))
+            for s, ks in _CTX_GRID.items()
+        ]
+        for s, h in handles:
+            try:
+                print(f"S={s}: {h.get()}")
+            except Exception as e:
+                print(f"S={s} failed: {e}")
     elif mode == "all":
         h_full = run_full.spawn()
         h_sweep = run_ksweep.spawn()
@@ -267,7 +323,8 @@ def main(mode: str = "smoke"):
             except Exception as e:
                 print(f"{name} failed: {e}")
     else:
-        print(f"Unknown mode '{mode}'. Choose: smoke | full | ksweep | all")
+        print(f"Unknown mode '{mode}'. "
+              f"Choose: smoke | full | ksweep | ctx_ksweep | all")
         return
 
     print(f"\nPull results:")
