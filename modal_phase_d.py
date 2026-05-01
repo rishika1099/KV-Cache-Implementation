@@ -40,6 +40,7 @@ image = (
         "numpy>=1.24.0",
         "tabulate>=0.9.0",
         "pandas>=2.0.0",
+        "wandb>=0.17.0",
     )
     .add_local_dir(str(_base / "methods"),     "/app/methods")
     .add_local_dir(str(_base / "benchmark"),   "/app/benchmark")
@@ -53,6 +54,9 @@ RESULTS_PATH  = Path("/results")
 HF_CACHE_PATH = Path("/root/.cache/huggingface")
 PHASE_DIR     = "phase_d"
 
+# W&B project for these runs. Override per-call with WANDB_PROJECT env var.
+WANDB_PROJECT = "kv-cache-benchmark"
+
 
 def _bootstrap():
     if "/app" not in sys.path:
@@ -60,10 +64,20 @@ def _bootstrap():
 
 
 def gpu_function(name: str, timeout: int = 3600, memory: int = 32768):
+    """
+    Decorator factory for Phase-D GPU jobs. Each job mounts:
+      - the HF secret (gated Llama-2 access)
+      - the W&B secret (must export WANDB_API_KEY)
+    Create the W&B secret once with:
+      modal secret create wandb WANDB_API_KEY=<key>
+    """
     return app.function(
         image=image,
         gpu="h100",
-        secrets=[modal.Secret.from_name("huggingface")],
+        secrets=[
+            modal.Secret.from_name("huggingface"),
+            modal.Secret.from_name("wandb"),
+        ],
         volumes={
             str(RESULTS_PATH):  results_vol,
             str(HF_CACHE_PATH): model_cache_vol,
@@ -72,6 +86,86 @@ def gpu_function(name: str, timeout: int = 3600, memory: int = 32768):
         memory=memory,
         name=name,
     )
+
+
+# ── W&B logging helper ──────────────────────────────────────────────────────
+
+def _log_to_wandb(run_name: str, records, *, group: str, tags: list,
+                  config: dict | None = None):
+    """
+    Push a list of ExperimentRecord objects to W&B as one run:
+      - per-record points logged sequentially (so the metrics show on a step axis),
+      - a `passkey_table` containing every record for grouped views,
+      - per-method × per-depth accuracy summaries,
+      - overall mean accuracy as run.summary['mean_accuracy'].
+
+    Failure to import wandb or missing API key is fatal — silent fallback
+    would defeat the point of "push runs to wandb".
+    """
+    import os
+    import wandb
+
+    if not os.environ.get("WANDB_API_KEY"):
+        raise RuntimeError(
+            "WANDB_API_KEY not set in container env. "
+            "Run: modal secret create wandb WANDB_API_KEY=<your-key>"
+        )
+
+    run = wandb.init(
+        project=os.environ.get("WANDB_PROJECT", WANDB_PROJECT),
+        name=run_name,
+        group=group,
+        tags=list(tags),
+        config=config or {},
+        reinit=True,
+        job_type="passkey_retrieval",
+    )
+
+    columns = ["method", "seq_len", "depth", "K", "n_sink", "n_local",
+               "n_trials", "accuracy", "n_correct", "throughput_tps"]
+    table = wandb.Table(columns=columns)
+
+    accs: list[float] = []
+    per_method_accs: dict[str, list[float]] = {}
+
+    for step, rec in enumerate(records):
+        # ExperimentRecord exposes .method, .config, .metrics
+        method = rec.method
+        cfg    = rec.config or {}
+        m      = rec.metrics or {}
+        acc    = float(m.get("accuracy", 0.0))
+        tput   = float(m.get("throughput_tps", 0.0))
+
+        wandb.log({
+            "method":          method,
+            "seq_len":         cfg.get("seq_len"),
+            "depth":           cfg.get("depth"),
+            "K":               cfg.get("K"),
+            "accuracy":        acc,
+            "n_correct":       m.get("n_correct"),
+            "n_trials":        m.get("n_trials"),
+            "throughput_tps":  tput,
+        }, step=step)
+
+        table.add_data(
+            method, cfg.get("seq_len"), cfg.get("depth"),
+            cfg.get("K"), cfg.get("n_sink"), cfg.get("n_local"),
+            m.get("n_trials"), acc, m.get("n_correct"), tput,
+        )
+        accs.append(acc)
+        per_method_accs.setdefault(method, []).append(acc)
+
+    wandb.log({"passkey_table": table})
+
+    if accs:
+        run.summary["mean_accuracy"] = sum(accs) / len(accs)
+        run.summary["n_records"]     = len(accs)
+    for method, vals in per_method_accs.items():
+        run.summary[f"acc/{method}/mean"] = sum(vals) / len(vals)
+
+    run.finish()
+    print(f"[wandb] logged {len(records)} records as run '{run_name}' "
+          f"under group='{group}'")
 
 
 # ── 1. Smoke — derisk runtime bugs cheaply ──────────────────────────────────
@@ -100,6 +194,17 @@ def run_smoke():
         seed=0, device="cuda", output_dir=out_dir,
     )
     results_vol.commit()
+
+    _log_to_wandb(
+        run_name="phase_d_smoke",
+        records=records,
+        group="phase_d",
+        tags=["phase_d", "smoke", "kivi_topk_all"],
+        config={"mode": "smoke", "model": "Llama-2-7b-hf",
+                "seq_len": 4096, "K": 1024,
+                "n_sink": 128, "n_local": 512,
+                "n_trials": 1, "n_depths": 1},
+    )
     return {"n_rows": len(records), "out_dir": str(out_dir)}
 
 
@@ -138,6 +243,18 @@ def run_full():
         seed=0, device="cuda", output_dir=out_dir,
     )
     results_vol.commit()
+
+    _log_to_wandb(
+        run_name="phase_d_full_ablation",
+        records=records,
+        group="phase_d",
+        tags=["phase_d", "ablation"] + methods,
+        config={"mode": "full", "model": "Llama-2-7b-hf",
+                "seq_len": 4096, "K": 1024,
+                "n_sink": 128, "n_local": 512,
+                "n_trials": 5, "n_depths": 5,
+                "methods": methods},
+    )
     return {"n_rows": len(records), "out_dir": str(out_dir)}
 
 
@@ -170,6 +287,18 @@ def run_ksweep():
         )
         all_records.extend(records)
     results_vol.commit()
+
+    _log_to_wandb(
+        run_name="phase_d_ksweep_kivi_topk",
+        records=all_records,
+        group="phase_d",
+        tags=["phase_d", "ksweep", "kivi_topk"],
+        config={"mode": "ksweep", "model": "Llama-2-7b-hf",
+                "seq_len": 4096,
+                "K_values": [512, 1024, 2048, 3072],
+                "n_sink": 128, "n_local": 512,
+                "n_trials": 5, "n_depths": 5},
+    )
     return {"n_rows": len(all_records), "out_dir": str(RESULTS_PATH / PHASE_DIR)}
 
 
