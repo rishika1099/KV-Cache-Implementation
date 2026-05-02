@@ -24,14 +24,22 @@ if not HF_TOKEN:
     raise EnvironmentError("Set HF_TOKEN env var before running: export HF_TOKEN=hf_...")
 HF_REPO   = "vm2825/longbench-llama2-filtered"
 TASKS     = ["qasper", "multifieldqa_en", "triviaqa", "2wikimqa", "multi_news", "lcc"]
-MAX_TOKENS = 4096
+MAX_TOKENS = 3600
 N_PER_TASK = 20
 
+# Must match the templates used in modal_longbench.py exactly
+DATASET2PROMPT = {
+    "qasper":           "You are given a scientific article and a question. Answer the question as concisely as you can, using a single phrase or sentence if possible. If the question cannot be answered based on the information in the article, write \"unanswerable\". If the question is a yes/no question, answer \"yes\", \"no\", or \"unanswerable\". Do not provide any explanation.\n\nArticle: {context}\n\n Answer the question based on the above article as concisely as you can, using a single phrase or sentence if possible. If the question cannot be answered based on the information in the article, write \"unanswerable\". If the question is a yes/no question, answer \"yes\", \"no\", or \"unanswerable\". Do not provide any explanation.\n\nQuestion: {input}\n\nAnswer:",
+    "multifieldqa_en":  "Read the following text and answer briefly.\n\n{context}\n\nNow, answer the following question based on the above text, only give me the answer and do not output any other words.\n\nQuestion: {input}\nAnswer:",
+    "triviaqa":         "Answer the question based on the given passage. Only give me the answer and do not output any other words. The following are some examples.\n\n{context}\n\n{input}",
+    "2wikimqa":         "Answer the question based on the given passages. Only give me the answer and do not output any other words.\n\nThe following are given passages.\n{context}\n\nAnswer the question based on the given passages. Only give me the answer and do not output any other words.\n\nQuestion: {input}\nAnswer:",
+    "multi_news":       "You are given several news passages. Write a one-page summary of all news. \n\nNews:\n{context}\n\nNow, write a one-page summary of all the news.\n\nSummary:",
+    "lcc":              "Please complete the code given below. \n{context}Next line of code:\n",
+}
 
-def build_prompt(ex):
-    context  = ex.get("context", "")
-    question = ex.get("input", "")
-    return f"{context}\n\nQuestion: {question}\nAnswer:"
+
+def build_prompt(ex, task):
+    return DATASET2PROMPT[task].format(**ex)
 
 
 def load_task_from_zip(zip_path, task):
@@ -45,7 +53,7 @@ def filter_task(examples, task, tokenizer):
     print(f"[{task}] Total examples: {len(examples)}")
     filtered = []
     for ex in examples:
-        prompt   = build_prompt(ex)
+        prompt   = build_prompt(ex, task)
         n_tokens = len(tokenizer(prompt, truncation=False)["input_ids"])
         if n_tokens < MAX_TOKENS:
             filtered.append(ex)
