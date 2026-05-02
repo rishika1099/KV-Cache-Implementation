@@ -168,6 +168,10 @@ class KIVIMethod(MethodWrapper):
                          Q(XKg) = GroupQuant(XKg, dim=channel, numGroup=(l-r)//G)
             For Values:  XVg = XV[:l-R];  XVr = XV[l-R:]   (or all in XVr if l <= R)
                          Q(XVg) = GroupQuant(XVg, dim=token, numGroup=d//G)
+
+        Also caches the dequantized block tensors so process_step can update
+        them incrementally rather than dequantizing all blocks from scratch
+        every decode step (avoids O(n²) dequantization overhead).
         """
         self.cache = {}
         result = []
@@ -194,23 +198,24 @@ class KIVIMethod(MethodWrapper):
             k_blocks = self._quantize_blocks_per_channel(XKg) if XKg.shape[2] > 0 else []
             v_blocks = self._quantize_blocks_per_token(XVg)   if XVg.shape[2] > 0 else []
 
+            # Dequantize blocks once at prefill; cached for incremental updates
+            k_dequant = self._dequantize_blocks(k_blocks)   if k_blocks else None
+            v_dequant = self._dequantize_v_blocks(v_blocks) if v_blocks else None
+
             self.cache[layer_idx] = {
-                'k_blocks': k_blocks,
-                'v_blocks': v_blocks,
+                'k_blocks':  k_blocks,
+                'v_blocks':  v_blocks,
+                'k_dequant': k_dequant,   # fp16 dequant of k_blocks, kept up-to-date
+                'v_dequant': v_dequant,   # fp16 dequant of v_blocks, kept up-to-date
                 'XKr': XKr,
                 'XVr': XVr,
             }
 
             # Reconstruct full KV for the model's first decode step
-            parts_k, parts_v = [], []
-            if k_blocks:
-                parts_k.append(self._dequantize_blocks(k_blocks))
-            if XKr.shape[2] > 0:
-                parts_k.append(XKr)
-            if v_blocks:
-                parts_v.append(self._dequantize_v_blocks(v_blocks))
-            if XVr.shape[2] > 0:
-                parts_v.append(XVr)
+            parts_k = ([k_dequant] if k_dequant is not None else []) + \
+                      ([XKr]       if XKr.shape[2] > 0            else [])
+            parts_v = ([v_dequant] if v_dequant is not None else []) + \
+                      ([XVr]       if XVr.shape[2] > 0            else [])
 
             full_k = torch.cat(parts_k, dim=2) if len(parts_k) > 1 else parts_k[0]
             full_v = torch.cat(parts_v, dim=2) if len(parts_v) > 1 else parts_v[0]
@@ -245,31 +250,38 @@ class KIVIMethod(MethodWrapper):
             XVr = torch.cat([state['XVr'], new_v], dim=2)
 
             # ── K: when residual hits R, quantize all R tokens (in R/G groups), reset ──
+            k_dequant_updated = False
             if XKr.shape[2] == R:
                 new_k_blocks = self._quantize_blocks_per_channel(XKr)
                 state['k_blocks'].extend(new_k_blocks)
+                # Append newly dequantized block to the cached dequant tensor
+                new_k_dequant = self._dequantize_blocks(new_k_blocks)
+                state['k_dequant'] = torch.cat([state['k_dequant'], new_k_dequant], dim=2) \
+                    if state['k_dequant'] is not None else new_k_dequant
                 XKr = XKr[:, :, :0, :]   # empty, preserves shape (B, H, 0, D)
+                k_dequant_updated = True
 
             # ── V: when residual exceeds R, quantize the oldest tokens, keep last R ──
+            v_dequant_updated = False
             if XVr.shape[2] > R:
                 v_to_quant = XVr[:, :, :-R, :]
                 new_v_blocks = self._quantize_blocks_per_token(v_to_quant)
                 state['v_blocks'].extend(new_v_blocks)
+                # Append newly dequantized block to the cached dequant tensor
+                new_v_dequant = self._dequantize_v_blocks(new_v_blocks)
+                state['v_dequant'] = torch.cat([state['v_dequant'], new_v_dequant], dim=2) \
+                    if state['v_dequant'] is not None else new_v_dequant
                 XVr = XVr[:, :, -R:, :]
+                v_dequant_updated = True
 
             state['XKr'] = XKr
             state['XVr'] = XVr
 
-            # ── Reconstruct full KV for the model ──
-            parts_k, parts_v = [], []
-            if state['k_blocks']:
-                parts_k.append(self._dequantize_blocks(state['k_blocks']))
-            if XKr.shape[2] > 0:
-                parts_k.append(XKr)
-            if state['v_blocks']:
-                parts_v.append(self._dequantize_v_blocks(state['v_blocks']))
-            if XVr.shape[2] > 0:
-                parts_v.append(XVr)
+            # ── Reconstruct full KV using cached dequant (no full re-dequantization) ──
+            parts_k = ([state['k_dequant']] if state['k_dequant'] is not None else []) + \
+                      ([XKr]                if XKr.shape[2] > 0                   else [])
+            parts_v = ([state['v_dequant']] if state['v_dequant'] is not None else []) + \
+                      ([XVr]                if XVr.shape[2] > 0                   else [])
 
             full_k = torch.cat(parts_k, dim=2) if len(parts_k) > 1 else parts_k[0]
             full_v = torch.cat(parts_v, dim=2) if len(parts_v) > 1 else parts_v[0]
