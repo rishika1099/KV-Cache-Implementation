@@ -160,3 +160,23 @@ The ~60–70% TTFT overhead at larger batches comes from two sources: (a) KIVI's
 | KIVI 2-bit | 0.273 | **−6.2%** (modest drop) |
 
 **Verdict:** KIVI 4-bit is a free lunch — near-identical quality with 4x smaller KV cache. KIVI 2-bit trades a 6% quality drop on long-context recall tasks for an 8x KV cache reduction and up to 3x throughput gains at high batch sizes. For throughput-oriented serving, 2-bit is compelling; for latency-sensitive or precision-critical applications, 4-bit is the better choice.
+
+---
+
+## Result Files
+
+| File | Contents |
+|------|----------|
+| `longbench_baseline.json` | Baseline FP16 — full per-example results, all 6 LongBench tasks, 20 examples each |
+| `longbench_kivi_2_128_32.json` | KIVI 2-bit — full per-example results (bits=2, residual_length=128, group_size=32) |
+| `longbench_kivi_4_128_32.json` | KIVI 4-bit — full per-example results (bits=4, residual_length=128, group_size=32) |
+| `longbench_kivi_{"bits": 2, "group_size": 32, "residual_length": 128}.json` | KIVI 2-bit (local copy with config in filename) |
+| `longbench_kivi_{"bits": 4, "group_size": 32, "residual_length": 128}.json` | KIVI 4-bit (local copy with config in filename) |
+| `longbench_baseline_qasper.json` | Early qasper-only baseline run (5 examples, pre-full eval) |
+| `longbench_kivi_kernel_2bit_res128_gs32.json` | KIVI kernel (CUDA) smoke test — qasper only, 5 examples |
+| `throughput_baseline_p1024_g512.json` | Baseline throughput — prefill=1024, generate=512, BS 1–256 |
+| `throughput_kivi_p1024_g512.json` | KIVI 2-bit throughput — prefill=1024, generate=512, BS 1–256 |
+| `throughput_baseline_p1024_g1024.json` | Baseline throughput smoke test — generate=1024, n_batches=1 |
+| `throughput_kivi_p1024_g1024.json` | KIVI 2-bit throughput smoke test — generate=1024, n_batches=1 |
+| `kivi_compare_baseline.json` | Early baseline comparison run |
+| `kivi_compare_kivi2.json` | Early KIVI 2-bit comparison run |
