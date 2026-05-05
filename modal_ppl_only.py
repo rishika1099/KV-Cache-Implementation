@@ -64,13 +64,11 @@ def _build_method(name, cfg):
         )
     elif name == "topk":
         return TopKMethod(
-            K=cfg.get("K", 512),
+            K=cfg.get("K", 2048),
             n_sink=cfg.get("n_sink", 128),
             n_local=cfg.get("n_local", 512),
-            refresh_interval=cfg.get("refresh_interval", 50),
-            page_size=cfg.get("page_size", 64),
-            cache_similarity_threshold=cfg.get("cache_similarity_threshold", 0.95),
-            chunk_size=cfg.get("chunk_size", 2048),
+            cosine_threshold=cfg.get("cosine_threshold", 0.9),
+            kernel_size=cfg.get("kernel_size", -1),
         )
     else:
         raise ValueError(f"Unknown method: {name}")
@@ -137,9 +135,9 @@ def main():
         ("snapkv", {"budget_ratio": 0.2, "sink_size": 4, "observation_window": 32}),
         ("snapkv", {"budget_ratio": 0.4, "sink_size": 4, "observation_window": 32}),
         ("snapkv", {"budget_ratio": 0.6, "sink_size": 4, "observation_window": 32}),
-        ("topk",   {"K": 512,  "n_sink": 128, "n_local": 512, "refresh_interval": 0}),
-        ("topk",   {"K": 1024, "n_sink": 128, "n_local": 512, "refresh_interval": 50}),
-        ("topk",   {"K": 2048, "n_sink": 128, "n_local": 512, "refresh_interval": 50}),
+        ("topk",   {"K": 512,  "n_sink": 128, "n_local": 512}),
+        ("topk",   {"K": 1024, "n_sink": 128, "n_local": 512}),
+        ("topk",   {"K": 2048, "n_sink": 128, "n_local": 512}),
     ]
 
     # Launch all in parallel

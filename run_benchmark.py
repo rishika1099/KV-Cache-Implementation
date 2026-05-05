@@ -48,8 +48,11 @@ def build_method(method_name, cfg):
         )
     elif method_name == "topk":
         return TopKMethod(
-            K=cfg.get('K', 512),
-            refresh_interval=cfg.get('refresh_interval', 50),
+            K=cfg.get('K', 2048),
+            n_sink=cfg.get('n_sink', 128),
+            n_local=cfg.get('n_local', 512),
+            cosine_threshold=cfg.get('cosine_threshold', 0.9),
+            kernel_size=cfg.get('kernel_size', -1),
         )
     else:
         raise ValueError(f"Unknown method: {method_name}")
