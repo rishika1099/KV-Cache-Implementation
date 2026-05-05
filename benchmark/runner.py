@@ -93,12 +93,21 @@ def generate_with_method(model, tokenizer, method, prompt,
         generated_ids.append(next_token.item())
 
         with torch.no_grad():
-            step_out = model(
+            # Methods that slice the KV cache (e.g. TopK) must override
+            # position_ids so RoPE is applied at the true sequence position,
+            # not at the (shorter) sliced-cache length.
+            forward_kwargs = dict(
                 input_ids=next_token,
                 past_key_values=past_kv,
                 use_cache=True,
                 output_attentions=False,  # not needed during decode
             )
+            true_len = getattr(method, 'true_seq_length', None)
+            if true_len is not None:
+                forward_kwargs['position_ids'] = torch.tensor(
+                    [[true_len]], device=device
+                )
+            step_out = model(**forward_kwargs)
 
         # Convert for method hooks, then back for the model
         step_kv_tuple = _cache_to_tuple(step_out.past_key_values)
