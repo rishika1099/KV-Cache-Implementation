@@ -8,6 +8,8 @@ Examples:
     modal run modal_longbench.py --method kivi --bits 4
     modal run modal_longbench.py --method kivi --bits 2
     modal run modal_longbench.py --method kivi --bits 2 --residual_length 64
+    modal run modal_longbench.py --method topk --top_k 2048
+    modal run modal_longbench.py --method topk --top_k 1024 --n_local 512
     modal run modal_longbench.py --tasks qasper,triviaqa
     modal run modal_longbench.py --n_per_task 10
 """
@@ -105,10 +107,11 @@ def run_longbench(
 
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    from methods.baseline   import BaselineMethod
-    from methods.kivi_quant import KIVIMethod
-    from benchmark.runner   import generate_with_method
-    from benchmark.datasets import DatasetLoader
+    from methods.baseline       import BaselineMethod
+    from methods.kivi_quant     import KIVIMethod
+    from methods.topk_selection import TopKMethod
+    from benchmark.runner       import generate_with_method
+    from benchmark.datasets     import DatasetLoader
 
     print(f"[modal] Loading {model_name}...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -126,6 +129,14 @@ def run_longbench(
             bits=method_cfg.get("bits", 4),
             residual_length=method_cfg.get("residual_length", 128),
             group_size=method_cfg.get("group_size", 32),
+        )
+    elif method_name == "topk":
+        method = TopKMethod(
+            K=method_cfg.get("K", 2048),
+            n_sink=method_cfg.get("n_sink", 128),
+            n_local=method_cfg.get("n_local", 512),
+            cosine_threshold=method_cfg.get("cosine_threshold", 0.9),
+            kernel_size=method_cfg.get("kernel_size", -1),
         )
     else:
         raise ValueError(f"Unknown method: {method_name}")
@@ -180,6 +191,12 @@ def main(
     bits: int = 4,
     residual_length: int = 128,
     group_size: int = 32,
+    # TopK-specific knobs (ignored unless method=topk)
+    top_k: int = 2048,
+    n_sink: int = 128,
+    n_local: int = 512,
+    cosine_threshold: float = 0.9,
+    kernel_size: int = -1,
     model: str = "meta-llama/Llama-2-7b-chat-hf",
     tasks: str = "",
     n_per_task: int = 9999,
@@ -192,6 +209,11 @@ def main(
         method_cfg = {}
     elif method == "kivi":
         method_cfg = {"bits": bits, "residual_length": residual_length, "group_size": group_size}
+    elif method == "topk":
+        method_cfg = {
+            "K": top_k, "n_sink": n_sink, "n_local": n_local,
+            "cosine_threshold": cosine_threshold, "kernel_size": kernel_size,
+        }
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -222,8 +244,11 @@ def main(
             if not isinstance(answers, list):
                 answers = [str(answers)]
             prompt = template.format(**ex)
-            # Middle-truncation: keep first half + last half (matches KIVI exactly)
-            tokens = tokenizer(prompt, truncation=False, return_tensors="pt").input_ids[0]
+            # Middle-truncation: keep first half + last half (matches KIVI exactly).
+            # No return_tensors here — we only need length + decode, and torch isn't
+            # required locally (the local entrypoint just preps prompts before sending
+            # the list to Modal).
+            tokens = tokenizer(prompt, truncation=False).input_ids
             if len(tokens) > MAX_LENGTH:
                 half = MAX_LENGTH // 2
                 prompt = (
