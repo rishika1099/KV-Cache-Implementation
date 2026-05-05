@@ -79,7 +79,14 @@ class SnapKVMethod(MethodWrapper):
         if attention_weights is None:
             # Can't compress without attention weights; pass through unchanged.
             return past_key_values
-
+        # Convert DynamicCache to tuple of (k, v) pairs if needed
+        if hasattr(past_key_values, 'key_cache'):
+            past_key_values = tuple(
+                (past_key_values.key_cache[i], past_key_values.value_cache[i])
+                for i in range(len(past_key_values.key_cache))
+            )
+        if attention_weights is not None and hasattr(attention_weights, 'key_cache'):
+            attention_weights = tuple(attention_weights)
         compressed = []
         for layer_idx, (layer_kv, layer_attn) in enumerate(
             zip(past_key_values, attention_weights)
