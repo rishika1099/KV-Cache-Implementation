@@ -21,9 +21,9 @@ methods:
   topk:
     enabled: true
     configs:
-      - {K: 512,  n_sink: 128, n_local: 512, refresh_interval: 0}
-      - {K: 1024, n_sink: 128, n_local: 512, refresh_interval: 50}
-      - {K: 2048, n_sink: 128, n_local: 512, refresh_interval: 50}
+      - {K: 512,  n_sink: 128, n_local: 512}
+      - {K: 1024, n_sink: 128, n_local: 512}
+      - {K: 2048, n_sink: 128, n_local: 512}
 
 datasets:
   sequence_lengths: [512, 2048, 8192]
