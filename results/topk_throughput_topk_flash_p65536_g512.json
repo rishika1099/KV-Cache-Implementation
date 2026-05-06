@@ -1,0 +1,52 @@
+{
+  "method": "topk_flash",
+  "prefill_len": 65536,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-hf",
+  "topk_params": null,
+  "budget_tokens": 65536,
+  "records": [
+    {
+      "ttft_ms": 5057.354994999997,
+      "decode_tps": 18.55458710409017,
+      "decode_ms_per_tok": 53.89502845792565,
+      "n_decode": 511,
+      "peak_mem_gb": 65.822810112
+    },
+    {
+      "ttft_ms": 5070.3962459999875,
+      "decode_tps": 18.580685998459455,
+      "decode_ms_per_tok": 53.81932615851272,
+      "n_decode": 511,
+      "peak_mem_gb": 65.822810112
+    },
+    {
+      "ttft_ms": 5076.562822,
+      "decode_tps": 18.458694507051586,
+      "decode_ms_per_tok": 54.17501219373777,
+      "n_decode": 511,
+      "peak_mem_gb": 65.822810112
+    },
+    {
+      "ttft_ms": 5083.015962000019,
+      "decode_tps": 18.31617219198302,
+      "decode_ms_per_tok": 54.596560324853215,
+      "n_decode": 511,
+      "peak_mem_gb": 65.822810112
+    },
+    {
+      "ttft_ms": 5081.852022999982,
+      "decode_tps": 18.062666224668394,
+      "decode_ms_per_tok": 55.36281230919765,
+      "n_decode": 511,
+      "peak_mem_gb": 65.822810112
+    }
+  ],
+  "summary": {
+    "mean_ttft_ms": 5077.956763249997,
+    "mean_decode_tps": 18.354554730540613,
+    "mean_decode_ms_per_tok": 54.48842774657534,
+    "mean_peak_mem_gb": 65.822810112,
+    "n_stable": 4
+  }
+}

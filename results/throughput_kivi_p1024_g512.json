@@ -1,0 +1,76 @@
+{
+  "method": "kivi",
+  "bits": 2,
+  "prefill_len": 1024,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-chat-hf",
+  "results": {
+    "1": {
+      "oom": false,
+      "mean_ttft_ms": 65.60820700000036,
+      "mean_decode_tps": 29.861520415661662,
+      "mean_total_tps": 29.805679166262735,
+      "mean_peak_mem_gb": 13.95974144,
+      "n_stable": 2
+    },
+    "2": {
+      "oom": false,
+      "mean_ttft_ms": 112.32953399999701,
+      "mean_decode_tps": 60.70890250147184,
+      "mean_total_tps": 60.42454871277947,
+      "mean_peak_mem_gb": 14.414307328,
+      "n_stable": 2
+    },
+    "4": {
+      "oom": false,
+      "mean_ttft_ms": 235.76608999999138,
+      "mean_decode_tps": 122.68168155802684,
+      "mean_total_tps": 121.20711814371114,
+      "mean_peak_mem_gb": 15.308234752,
+      "n_stable": 2
+    },
+    "8": {
+      "oom": false,
+      "mean_ttft_ms": 416.1814509999999,
+      "mean_decode_tps": 242.7263232600697,
+      "mean_total_tps": 237.3364862887357,
+      "mean_peak_mem_gb": 17.103167488,
+      "n_stable": 2
+    },
+    "16": {
+      "oom": false,
+      "mean_ttft_ms": 820.3239329999974,
+      "mean_decode_tps": 479.75864246269,
+      "mean_total_tps": 458.6214277085644,
+      "mean_peak_mem_gb": 20.682285056,
+      "n_stable": 2
+    },
+    "32": {
+      "oom": false,
+      "mean_ttft_ms": 1658.7876479999863,
+      "mean_decode_tps": 956.8419751377187,
+      "mean_total_tps": 873.8907899233748,
+      "mean_peak_mem_gb": 27.838947328,
+      "n_stable": 2
+    },
+    "64": {
+      "oom": false,
+      "mean_ttft_ms": 3326.9833004999896,
+      "mean_decode_tps": 1295.1361144661023,
+      "mean_total_tps": 1146.6009114322394,
+      "mean_peak_mem_gb": 42.101940224,
+      "n_stable": 2
+    },
+    "128": {
+      "oom": false,
+      "mean_ttft_ms": 6676.8545355000415,
+      "mean_decode_tps": 1516.8341437352597,
+      "mean_total_tps": 1316.0304917282917,
+      "mean_peak_mem_gb": 70.690840576,
+      "n_stable": 2
+    },
+    "256": {
+      "oom": true
+    }
+  }
+}
