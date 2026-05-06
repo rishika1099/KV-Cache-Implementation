@@ -97,8 +97,9 @@ def _set_seeds(seed=42):
 def run_longbench(
     method_name: str,
     method_cfg: dict,
-    examples: list,
     model_name: str,
+    task_list: list,
+    n_per_task: int,
     max_new_tokens: int = 200,
     seed: int = 42,
 ) -> list:
@@ -106,6 +107,7 @@ def run_longbench(
     _set_seeds(seed)
 
     import torch
+    from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from methods.baseline       import BaselineMethod
     from methods.kivi_quant     import KIVIMethod
@@ -144,7 +146,45 @@ def run_longbench(
     cfg_str = json.dumps(method_cfg, sort_keys=True)
     results = []
 
-    for ex in examples:
+    # Load dataset examples and prepare prompts inside Modal.
+    all_examples = []
+    for task in task_list:
+        print(f"  Loading {task}...")
+        ds = load_dataset(HF_DATASET, task, split="test")
+        template = DATASET2PROMPT[task]
+        task_max_tokens = DATASET2MAXLEN[task]
+        truncated = 0
+        count = 0
+
+        for ex in ds:
+            if count >= n_per_task:
+                break
+
+            answers = ex.get("answers", [""])
+            if not isinstance(answers, list):
+                answers = [str(answers)]
+
+            prompt = template.format(**ex)
+            tokens = tokenizer(prompt, truncation=False).input_ids
+            if len(tokens) > MAX_LENGTH:
+                half = MAX_LENGTH // 2
+                prompt = (
+                    tokenizer.decode(tokens[:half], skip_special_tokens=True) +
+                    tokenizer.decode(tokens[-half:], skip_special_tokens=True)
+                )
+                truncated += 1
+
+            all_examples.append({
+                "task": task,
+                "prompt": prompt,
+                "answers": answers,
+                "max_new_tokens": task_max_tokens,
+            })
+            count += 1
+
+        print(f"    {count} examples  ({truncated} middle-truncated to {MAX_LENGTH} tokens)")
+
+    for ex in all_examples:
         task           = ex["task"]
         prompt         = ex["prompt"]
         answers        = ex["answers"]
@@ -199,11 +239,9 @@ def main(
     kernel_size: int = -1,
     model: str = "meta-llama/Llama-2-7b-chat-hf",
     tasks: str = "",
-    n_per_task: int = 9999,
+    n_per_task: int = 20,
     max_new_tokens: int = 200,
 ):
-    from datasets import load_dataset
-
     # Build method config
     if method == "baseline":
         method_cfg = {}
@@ -217,58 +255,15 @@ def main(
     else:
         raise ValueError(f"Unknown method: {method}")
 
-    from transformers import AutoTokenizer
-
     task_list = [t.strip() for t in tasks.split(",") if t.strip()] or ALL_TASKS
     cfg_str = json.dumps(method_cfg, sort_keys=True)
     print(f"Method: {method}  cfg={cfg_str}")
     print(f"Tasks:  {task_list}  ({n_per_task} per task)")
     print(f"Model:  {model}")
-
-    print(f"Loading tokenizer for truncation ({model})...")
-    tokenizer = AutoTokenizer.from_pretrained(model)
-
-    # Load examples with KIVI-style middle-truncation at MAX_LENGTH
-    all_examples = []
-    for task in task_list:
-        print(f"  Loading {task}...")
-        ds = load_dataset(HF_DATASET, task, split="test")
-        template = DATASET2PROMPT[task]
-        task_max_tokens = DATASET2MAXLEN[task]
-        truncated = 0
-        count = 0
-        for ex in ds:
-            if count >= n_per_task:
-                break
-            answers = ex.get("answers", [""])
-            if not isinstance(answers, list):
-                answers = [str(answers)]
-            prompt = template.format(**ex)
-            # Middle-truncation: keep first half + last half (matches KIVI exactly).
-            # No return_tensors here — we only need length + decode, and torch isn't
-            # required locally (the local entrypoint just preps prompts before sending
-            # the list to Modal).
-            tokens = tokenizer(prompt, truncation=False).input_ids
-            if len(tokens) > MAX_LENGTH:
-                half = MAX_LENGTH // 2
-                prompt = (
-                    tokenizer.decode(tokens[:half],  skip_special_tokens=True) +
-                    tokenizer.decode(tokens[-half:], skip_special_tokens=True)
-                )
-                truncated += 1
-            all_examples.append({
-                "task":           task,
-                "prompt":         prompt,
-                "answers":        answers,
-                "max_new_tokens": task_max_tokens,
-            })
-            count += 1
-        print(f"    {count} examples  ({truncated} middle-truncated to {MAX_LENGTH} tokens)")
-
-    print(f"\nTotal: {len(all_examples)} examples — launching container...")
+    print(f"\nLaunching container...")
 
     results = run_longbench.remote(
-        method, method_cfg, all_examples, model, max_new_tokens,
+        method, method_cfg, model, task_list, n_per_task, max_new_tokens,
     )
 
     # Also save locally

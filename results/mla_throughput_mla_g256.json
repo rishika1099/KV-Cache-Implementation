@@ -1,0 +1,31 @@
+{
+  "method": "mla",
+  "max_new_tokens": 256,
+  "model": "botsxc/llama2-7b-chat-mla-2048-8",
+  "results": {
+    "512": {
+      "mean_ttft_ms": 38.534632666670156,
+      "mean_decode_tps": 43.01519725589247,
+      "mean_total_tps": 42.906597347525285,
+      "mean_peak_mem_gb": 13.65945344,
+      "mean_kv_cache_mb": 103.673856,
+      "n_stable": 3
+    },
+    "1024": {
+      "mean_ttft_ms": 41.205079666662904,
+      "mean_decode_tps": 42.4746081385069,
+      "mean_total_tps": 42.350685457141154,
+      "mean_peak_mem_gb": 13.787492864,
+      "mean_kv_cache_mb": 172.879872,
+      "n_stable": 3
+    },
+    "2048": {
+      "mean_ttft_ms": 76.45529899999322,
+      "mean_decode_tps": 44.39226061181943,
+      "mean_total_tps": 43.98078142165366,
+      "mean_peak_mem_gb": 14.04781824,
+      "mean_kv_cache_mb": 311.291904,
+      "n_stable": 3
+    }
+  }
+}
