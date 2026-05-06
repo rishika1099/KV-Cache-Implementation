@@ -85,14 +85,14 @@ sys.path.insert(0, str(TRANSMLA_DIR))    # transmla.*
 # ── Default model paths ───────────────────────────────────────────────────────
 MODEL_PATHS = {
     "llama2": {
-        "base":       "",
-        "mla":        "",
+        "base":       "meta-llama/Llama-2-7b-chat-hf",
+        "mla":        "botsxc/llama2-7b-chat-mla-2048-8",
         "label_base": "llama2-7B",
         "label_mla":  "llama2-7B-MLA-latent-2048",
     },
     "qwen25": {
-        "base":       "",
-        "mla":        "",
+        "base":       "Qwen/Qwen2.5-7B",
+        "mla":        "botsxc/qwen2.5-7b-instruct-mla-256",
         "label_base": "qwen2.5-7B",
         "label_mla":  "qwen2.5-7B-MLA-latent-256",
     },
