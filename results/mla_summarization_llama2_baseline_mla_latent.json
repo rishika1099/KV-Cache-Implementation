@@ -1,0 +1,78 @@
+{
+  "baseline": [
+    {
+      "label": "llama2-7B",
+      "doc": "RESULTS",
+      "response": " KIVI is a technique for reducing the memory usage of a transformer-based language model by quantizing the key and value components of the model's weights to reduce the memory usage of the key-value store (KV) used by the model.\n\nThe KIVI technique consists of two main components:\n\n1. **Key-value quantization**: The key and value components of the model's weights are quantized to reduce the memory usage of the KV store.\n2. **KV cache optimization**: The KV cache is optimized to reduce the number of requests to the number of requests to the number of requests to the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of requests to reduce the number of",
+      "input_tokens": 4122,
+      "tokens_generated": 200,
+      "ttft_ms": 1038.967875000001,
+      "throughput_tps": 49.73798570033653,
+      "per_token_latency_ms": 20.105357825000016,
+      "kv_cache_mb": 2265.972736,
+      "peak_memory_gb": 16.082073088
+    },
+    {
+      "label": "llama2-7B",
+      "doc": "RESULTS_MLA",
+      "response": " The report compares the performance of a model using the MLA (Multi-Layer Attention) technique against a baseline model in terms of single-request latency and KV (Key-Value) memory usage. The MLA model is able to reduce KV memory usage by approximately 3.9 times compared to the baseline model, while also improving decode speed by approximately 1.26 to 1.32 times. However, the MLA model also results in a significant decrease in quality on a LongBench dataset, with an overall drop of approximately 0.238 to 0.081. The report concludes that in the current setup, the MLA model is a clear winner in terms of KV size and decode speed, but the particular MLA model and configuration evaluated in the report shows a substantial quality regression on LongBench.",
+      "input_tokens": 2080,
+      "tokens_generated": 184,
+      "ttft_ms": 76.86642000000177,
+      "throughput_tps": 48.38109842555847,
+      "per_token_latency_ms": 20.669228945652176,
+      "kv_cache_mb": 1186.988032,
+      "peak_memory_gb": 14.849181696
+    },
+    {
+      "label": "llama2-7B",
+      "doc": "TOPK",
+      "response": " The text describes a method called TopK for selecting a subset of tokens from a transformer model's output, based on their presence in the input. TopK is a sparse selection method, not a quantization method, and it keeps the full FP16 KV cache in memory. On each decode step, attention is computed only over a selected subset of tokens, which are chosen dynamically per query. The selection is per-layer, and soft-vote is used across heads. The trade-off between TopK and KIVI ( another compression method) is discussed, and the results of applying TopK to a transformer model on several NLP tasks are presented. The results show that TopK at K=2048 and K=1024 are lossless, and cutting K from 2048 to 1024 actually improves the overall score. However, at K=512, TopK hits the same quality",
+      "input_tokens": 1583,
+      "tokens_generated": 200,
+      "ttft_ms": 58.30449799999826,
+      "throughput_tps": 54.5621333513473,
+      "per_token_latency_ms": 18.327729114999993,
+      "kv_cache_mb": 934.805504,
+      "peak_memory_gb": 14.561242624
+    }
+  ],
+  "mla_latent": [
+    {
+      "label": "llama2-7B-MLA-latent-2048",
+      "doc": "RESULTS",
+      "response": "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n **\n **\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n **\n ** **, **, **,\n, **, **,\n **\n **\n\n\n\n",
+      "input_tokens": 4122,
+      "tokens_generated": 200,
+      "ttft_ms": 167.96292400000112,
+      "throughput_tps": 36.2280811989128,
+      "per_token_latency_ms": 27.60289716999999,
+      "kv_cache_mb": 584.196096,
+      "peak_memory_gb": 14.580048896
+    },
+    {
+      "label": "llama2-7B-MLA-latent-2048",
+      "doc": "RESULTS_MLA",
+      "response": "\n\n\n\n### Conclusion\nIn conclusion, the results show that MLa is a more efficient and accurate decoder for image recognition tasks, especially when dealing with large images. The improved accuracy and faster decode times demonstrate the advantage of using MLa over the baseline. However, the increased computational cost of MLa is a trade-off between accuracy and decode time. The optimal balance between accuracy and decode time is crucial for real-world applications.\n\n\n\nReferences\n\n\n* [1] \n\n\nNote: The above table shows the results of the comparison between MLa and baseline for different image sizes. The larger the image size, the greater the difference in accuracy and decode time.\n\n\nReferences\n\n[1] 1. \"Deepartment of the **La**, which is a more accurate and faster than baseline for large images.\n\n\n\nIn conclusion, MLa is a more",
+      "input_tokens": 2080,
+      "tokens_generated": 200,
+      "ttft_ms": 78.12293899999645,
+      "throughput_tps": 45.97880622146203,
+      "per_token_latency_ms": 21.749151015000017,
+      "kv_cache_mb": 308.18304,
+      "peak_memory_gb": 14.059587584
+    },
+    {
+      "label": "llama2-7B-MLA-latent-2048",
+      "doc": "TOPK",
+      "response": "\n\n\n**Conclusion**\nTopK is a powerful tool for improving the quality of the generated code. It can be used to improve the quality of the generated code by selecting the most relevant features and ignoring the most important features. This can be done by using the \"feature selection\" mechanism, which allows to select the most important features and ignore the less important ones. This can be done by using the \"feature selection\" mechanism, which allows to select the most important features and ignore the less important ones.\n\n\n**References**\n\n[1] \n\n* [1] \n\n**Related articles**\n\n\n* [2] \n\n**TopK: A Comprehensive guide to the use of TopK in NLP.**\n\n\nTopK is a powerful tool for improving the quality of the generated code. It can be used to:\n\n\n* **Improving the quality",
+      "input_tokens": 1583,
+      "tokens_generated": 200,
+      "ttft_ms": 58.39360800000293,
+      "throughput_tps": 42.16403633602795,
+      "per_token_latency_ms": 23.716894464999996,
+      "kv_cache_mb": 241.004544,
+      "peak_memory_gb": 13.935387136
+    }
+  ]
+}

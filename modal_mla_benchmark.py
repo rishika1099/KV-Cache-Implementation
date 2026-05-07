@@ -111,15 +111,21 @@ def _set_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 
 
-def _apply_chat_template(tokenizer, prompt: str) -> str:
-    return tokenizer.apply_chat_template(
-        [{"role": "user", "content": prompt}],
-        tokenize=False,
-        add_generation_prompt=True,
-    )
+def _apply_chat_template(tokenizer, prompt: str, system_prompt: str = "") -> str:
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append({"role": "user", "content": prompt})
+    if getattr(tokenizer, "chat_template", None):
+        return tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+    if system_prompt:
+        return f"[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{prompt} [/INST]"
+    return f"[INST] {prompt} [/INST]"
 
 
-def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_template: bool = False):
+def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_template: bool = False, system_prompt: str = "", filter_by_length: bool = False):
     from datasets import load_dataset
     all_examples = []
     for task in task_list:
@@ -128,6 +134,7 @@ def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_t
         template = DATASET2PROMPT[task]
         task_max_tokens = DATASET2MAXLEN[task]
         truncated = 0
+        filtered = 0
         count = 0
         for ex in ds:
             if count >= n_per_task:
@@ -138,6 +145,9 @@ def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_t
             prompt = template.format(**ex)
             tokens = tokenizer(prompt, truncation=False).input_ids
             if len(tokens) > MAX_LENGTH:
+                if filter_by_length:
+                    filtered += 1
+                    continue
                 half = MAX_LENGTH // 2
                 prompt = (
                     tokenizer.decode(tokens[:half], skip_special_tokens=True) +
@@ -145,7 +155,7 @@ def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_t
                 )
                 truncated += 1
             if use_chat_template:
-                prompt = _apply_chat_template(tokenizer, prompt)
+                prompt = _apply_chat_template(tokenizer, prompt, system_prompt)
             all_examples.append({
                 "task": task,
                 "prompt": prompt,
@@ -153,7 +163,10 @@ def _load_examples(tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_t
                 "max_new_tokens": task_max_tokens,
             })
             count += 1
-        print(f"    {count} examples  ({truncated} middle-truncated to {MAX_LENGTH} tokens)")
+        if filter_by_length:
+            print(f"    {count} examples  ({filtered} filtered out, >{MAX_LENGTH} tokens)")
+        else:
+            print(f"    {count} examples  ({truncated} middle-truncated to {MAX_LENGTH} tokens)")
     return all_examples
 
 
@@ -323,7 +336,9 @@ def run_mla_benchmark(
     run_baseline: bool,
     run_mla: bool,
     use_chat_template: bool = False,
+    system_prompt: str = "",
     seed: int = 42,
+    filter_by_length: bool = False,
 ) -> dict:
     """
     Run LongBench for one model pair (base and/or MLA latent) in a single container.
@@ -340,7 +355,7 @@ def run_mla_benchmark(
     prep_tokenizer = AutoTokenizer.from_pretrained(model_paths["base"])
     if prep_tokenizer.pad_token is None:
         prep_tokenizer.pad_token = prep_tokenizer.eos_token
-    examples = _load_examples(prep_tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_template)
+    examples = _load_examples(prep_tokenizer, task_list, n_per_task, hf_dataset_path, use_chat_template, system_prompt, filter_by_length)
     del prep_tokenizer
 
     results = {}
@@ -400,8 +415,10 @@ def main(
     n_per_task: int = 20,
     hf_dataset: str = "vm2825/longbench-raw",
     use_chat_template: bool = False,
+    system_prompt: str = "You are a helpful and precise assistant for answering questions.",
     seed: int = 42,
     dry_run: bool = False,
+    filter_by_length: bool = False,
 ):
     if not run_baseline and not run_mla:
         print("[warning] Neither --run_baseline nor --run_mla was set. Nothing to do.")
@@ -435,7 +452,9 @@ def main(
         run_baseline=run_baseline,
         run_mla=run_mla,
         use_chat_template=use_chat_template,
+        system_prompt=system_prompt,
         seed=seed,
+        filter_by_length=filter_by_length,
     )
 
     # ── Save locally ───────────────────────────────────────────────────────────
