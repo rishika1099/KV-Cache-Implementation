@@ -43,7 +43,10 @@ image = (
         "accelerate>=0.27.0",
         "numpy>=1.24.0",
         "triton>=2.3.0",
+        "packaging",
+        "ninja",
     )
+    .pip_install("flash-attn>=2.5.0", extra_options="--no-build-isolation")
     .add_local_dir(str(_base / "methods"), "/app/methods", copy=True)
     .run_commands(
         "cd /app/methods/kivi_kernels && "

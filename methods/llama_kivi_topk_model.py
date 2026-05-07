@@ -410,34 +410,19 @@ class LlamaAttention_KIVITopK(nn.Module):
 
         # ══════════════════════════════════════════════════════════════════════
         # PREFILL STEP  (past_key_value is None)
-        # Same as LlamaAttention_KIVI — full FP16 attention, then quantise.
+        # Use scaled_dot_product_attention so flash-attn handles the causal
+        # mask in O(T) memory — avoids OOM at long context (32K+).
         # TopK is NOT applied at prefill (context-processing step).
         # ══════════════════════════════════════════════════════════════════════
         else:
-            attn_weights = torch.matmul(
-                query_states, key_states.transpose(2, 3)
-            ) / math.sqrt(self.head_dim)
-
-            if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention weights shape mismatch: expected "
-                    f"{(bsz, self.num_heads, q_len, kv_seq_len)}, got {attn_weights.size()}"
-                )
-
-            if attention_mask is not None:
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask shape mismatch: expected "
-                        f"{(bsz, 1, q_len, kv_seq_len)}, got {attention_mask.size()}"
-                    )
-                attn_weights = attn_weights + attention_mask
-                attn_weights = torch.max(
-                    attn_weights,
-                    torch.tensor(torch.finfo(attn_weights.dtype).min),
-                )
-
-            attn_weights  = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_output   = torch.matmul(attn_weights, value_states)
+            # SDPA uses flash-attn when available and is_causal=True, giving
+            # O(T) memory vs O(T²) for explicit torch.matmul(Q, K^T).
+            attn_output = F.scaled_dot_product_attention(
+                query_states, key_states, value_states,
+                attn_mask=None,
+                dropout_p=0.0,
+                is_causal=True,
+            ).to(query_states.dtype)
 
             # ── Quantise K after prefill (KIVI algorithm 1) ─────────────────
             r = key_states.shape[-2] % self.residual_length
