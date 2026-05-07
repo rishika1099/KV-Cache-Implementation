@@ -249,44 +249,50 @@ class LlamaAttention_KIVITopK(nn.Module):
         kv_seq_len: int,
     ) -> torch.Tensor:
         """
-        Fused sparse attention-over-V for the decode step.
+        Sparse attention-over-V for the decode step.
 
-        Quantized portion  → Triton kernel (gather + unpack + dequant + weighted sum)
-        FP16 residual      → standard torch.matmul
+        Quantized portion → gather packed int32 rows, feed directly to
+                            cuda_bmm_fA_qB_outer (KIVI's own optimised kernel).
+                            Avoids the unpack→fp16→matmul chain; data stays
+                            packed (4× smaller) until the CUDA kernel.
+        FP16 residual     → standard small torch.matmul.
 
         Returns: (B, nh, 1, head_dim)
         """
-        from methods.kivi_kernels.sparse_attn_v import sparse_weighted_sum_quant
-
         n_full  = value_states_full.shape[-2]
         n_quant = kv_seq_len - n_full
-        B, nh   = value_states_full.shape[:2]
 
-        quant_mask = selected_idx < n_quant   # positions in the quantized region
+        quant_mask = selected_idx < n_quant
         full_mask  = ~quant_mask
 
         attn_out = None
 
-        # ── Quantized portion: fused Triton kernel ────────────────────────────
+        # ── Quantized portion: gather packed rows → KIVI bmm kernel ──────────
         if quant_mask.any() and value_states_quant is not None:
-            q_idx    = selected_idx[quant_mask]                          # (budget_q,)
-            attn_w_q = attn_weights_sel[:, :, 0, quant_mask]            # (B, nh, budget_q)
-            # Returns (B, nh, head_dim)
-            attn_out = sparse_weighted_sum_quant(
-                value_states_quant, value_scale, value_mn,
-                attn_w_q, q_idx,
-                self.v_bits, self.group_size,
-            ).unsqueeze(2)   # (B, nh, 1, head_dim)
+            q_idx = selected_idx[quant_mask]                              # (budget_q,)
 
-        # ── Full FP16 residual: standard small matmul ─────────────────────────
+            # Gather only the selected packed rows — O(budget_q × packed_dim).
+            # These stay as int32; cuda_bmm_fA_qB_outer unpacks internally.
+            v_q_sel  = value_states_quant[:, :, q_idx, :].contiguous()   # (B,nh,budget_q,D//fps)
+            v_s_sel  = value_scale[:, :, q_idx, :].contiguous()          # (B,nh,budget_q,n_groups)
+            v_mn_sel = value_mn[:, :, q_idx, :].contiguous()             # (B,nh,budget_q,n_groups)
+            attn_w_q = attn_weights_sel[:, :, :, quant_mask]             # (B,nh,1,budget_q)
+
+            attn_out = cuda_bmm_fA_qB_outer(
+                self.group_size,
+                attn_w_q, v_q_sel, v_s_sel, v_mn_sel,
+                self.v_bits,
+            )                                                             # (B,nh,1,D)
+
+        # ── Full FP16 residual: small standard matmul ─────────────────────────
         if full_mask.any():
-            f_idx    = selected_idx[full_mask] - n_quant                 # (budget_f,)
-            attn_w_f = attn_weights_sel[:, :, :, full_mask]              # (B, nh, 1, budget_f)
-            V_full   = value_states_full[:, :, f_idx, :]                 # (B, nh, budget_f, D)
-            out_full = torch.matmul(attn_w_f, V_full)                   # (B, nh, 1, D)
+            f_idx    = selected_idx[full_mask] - n_quant                  # (budget_f,)
+            attn_w_f = attn_weights_sel[:, :, :, full_mask]               # (B,nh,1,budget_f)
+            V_full   = value_states_full[:, :, f_idx, :]                  # (B,nh,budget_f,D)
+            out_full = torch.matmul(attn_w_f, V_full)                    # (B,nh,1,D)
             attn_out = out_full if attn_out is None else attn_out + out_full
 
-        # ── Fallback: no quant cache yet, all full ────────────────────────────
+        # ── Fallback: no quant cache yet ──────────────────────────────────────
         if attn_out is None:
             attn_out = torch.matmul(attn_weights_sel, value_states_full)
 
