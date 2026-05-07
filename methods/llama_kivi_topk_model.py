@@ -238,6 +238,60 @@ class LlamaAttention_KIVITopK(nn.Module):
 
         return V_sel
 
+    def _sparse_attn_v(
+        self,
+        attn_weights_sel,       # (B, nh, 1, budget) — softmaxed, budget = len(selected_idx)
+        selected_idx,           # (budget,) absolute KV positions
+        value_states_quant,     # (B, nh, n_quant, packed_dim) int32 or None
+        value_states_full,      # (B, nh, residual_len, head_dim) fp16
+        value_scale,            # (B, nh, n_quant, n_groups) fp16 or None
+        value_mn,               # (B, nh, n_quant, n_groups) fp16 or None
+        kv_seq_len: int,
+    ) -> torch.Tensor:
+        """
+        Fused sparse attention-over-V for the decode step.
+
+        Quantized portion  → Triton kernel (gather + unpack + dequant + weighted sum)
+        FP16 residual      → standard torch.matmul
+
+        Returns: (B, nh, 1, head_dim)
+        """
+        from methods.kivi_kernels.sparse_attn_v import sparse_weighted_sum_quant
+
+        n_full  = value_states_full.shape[-2]
+        n_quant = kv_seq_len - n_full
+        B, nh   = value_states_full.shape[:2]
+
+        quant_mask = selected_idx < n_quant   # positions in the quantized region
+        full_mask  = ~quant_mask
+
+        attn_out = None
+
+        # ── Quantized portion: fused Triton kernel ────────────────────────────
+        if quant_mask.any() and value_states_quant is not None:
+            q_idx    = selected_idx[quant_mask]                          # (budget_q,)
+            attn_w_q = attn_weights_sel[:, :, 0, quant_mask]            # (B, nh, budget_q)
+            # Returns (B, nh, head_dim)
+            attn_out = sparse_weighted_sum_quant(
+                value_states_quant, value_scale, value_mn,
+                attn_w_q, q_idx,
+                self.v_bits, self.group_size,
+            ).unsqueeze(2)   # (B, nh, 1, head_dim)
+
+        # ── Full FP16 residual: standard small matmul ─────────────────────────
+        if full_mask.any():
+            f_idx    = selected_idx[full_mask] - n_quant                 # (budget_f,)
+            attn_w_f = attn_weights_sel[:, :, :, full_mask]              # (B, nh, 1, budget_f)
+            V_full   = value_states_full[:, :, f_idx, :]                 # (B, nh, budget_f, D)
+            out_full = torch.matmul(attn_w_f, V_full)                   # (B, nh, 1, D)
+            attn_out = out_full if attn_out is None else attn_out + out_full
+
+        # ── Fallback: no quant cache yet, all full ────────────────────────────
+        if attn_out is None:
+            attn_out = torch.matmul(attn_weights_sel, value_states_full)
+
+        return attn_out   # (B, nh, 1, head_dim)
+
     # ── Forward ───────────────────────────────────────────────────────────────
 
     def forward(
@@ -349,14 +403,16 @@ class LlamaAttention_KIVITopK(nn.Module):
                     attn_weights_sel, dim=-1, dtype=torch.float32,
                 ).to(query_states.dtype)
 
-                # Dequantise only the selected V rows — HBM reads ∝ budget.
-                V_sel = self._gather_v(
+                # Fused: sparse gather + unpack + dequant + weighted sum.
+                # Quantized rows handled by Triton kernel (no intermediate buffer).
+                # FP16 residual rows handled by a small standard matmul.
+                attn_output = self._sparse_attn_v(
+                    attn_weights_sel,
                     selected_idx,
                     value_states_quant, value_states_full,
                     value_scale, value_mn,
                     kv_seq_len,
-                )
-                attn_output = torch.matmul(attn_weights_sel, V_sel)      # (B,nh,1,D)
+                )                                                         # (B,nh,1,D)
 
             else:
                 # ── Dense path: budget >= context, use KIVI kernels ───────────
