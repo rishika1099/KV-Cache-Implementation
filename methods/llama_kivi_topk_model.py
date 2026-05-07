@@ -192,7 +192,7 @@ class LlamaAttention_KIVITopK(nn.Module):
 
         Returns: (B, nh, len(selected_idx), head_dim) float16
         """
-        from methods.kivi_kernels.new_pack import unpack_and_dequant_vcache
+        from methods.kivi_kernels.new_pack import unpack_tensor
 
         n_full  = value_states_full.shape[-2]
         n_quant = kv_seq_len - n_full
@@ -200,6 +200,7 @@ class LlamaAttention_KIVITopK(nn.Module):
         B, nh   = value_states_full.shape[:2]
         device  = value_states_full.device
         budget  = selected_idx.shape[0]
+        n_groups = self.head_dim // self.group_size   # e.g. 128 // 32 = 4
 
         V_sel = torch.empty(
             B, nh, budget, self.head_dim,
@@ -211,12 +212,25 @@ class LlamaAttention_KIVITopK(nn.Module):
 
         if quant_mask.any() and value_states_quant is not None:
             q_idx   = selected_idx[quant_mask]
-            q_rows  = value_states_quant[:, :, q_idx, :]   # (B, nh, n_q_sel, D//fps)
-            s_rows  = value_scale[:, :, q_idx, :]           # (B, nh, n_q_sel, D//gs)
-            mn_rows = value_mn[:, :, q_idx, :]              # (B, nh, n_q_sel, D//gs)
-            V_sel[:, :, quant_mask, :] = unpack_and_dequant_vcache(
-                q_rows, s_rows, mn_rows, self.group_size, self.v_bits,
-            )
+            n_q_sel = int(q_idx.shape[0])
+
+            # Make contiguous — fancy-indexed tensors may not be.
+            q_rows  = value_states_quant[:, :, q_idx, :].contiguous()  # (B,nh,n_q_sel,D//fps)
+            s_rows  = value_scale[:, :, q_idx, :].contiguous()          # (B,nh,n_q_sel,n_groups)
+            mn_rows = value_mn[:, :, q_idx, :].contiguous()             # (B,nh,n_q_sel,n_groups)
+
+            # Unpack int32 → raw quantized int values then cast to fp16
+            unpacked = unpack_tensor(q_rows, self.v_bits, pack_dim=3).to(torch.float16)
+            # unpacked: (B, nh, n_q_sel, head_dim)
+
+            # Dequantize via explicit flat reshape — avoids any broadcasting ambiguity
+            # from non-trivial strides after fancy indexing.
+            flat_u  = unpacked.reshape(B * nh * n_q_sel, n_groups, self.group_size)
+            flat_s  = s_rows.reshape(B * nh * n_q_sel, n_groups, 1)
+            flat_mn = mn_rows.reshape(B * nh * n_q_sel, n_groups, 1)
+            dequant = (flat_u * flat_s + flat_mn).reshape(B, nh, n_q_sel, self.head_dim)
+
+            V_sel[:, :, quant_mask, :] = dequant
 
         if full_mask.any():
             f_idx = selected_idx[full_mask] - n_quant
