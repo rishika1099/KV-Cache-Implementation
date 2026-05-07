@@ -45,7 +45,8 @@ image = (
         "rouge-score>=0.1.2",
         "triton>=2.3.0",
     )
-    .add_local_dir(str(_base / "methods"), "/app/methods", copy=True)
+    .add_local_dir(str(_base / "methods"),   "/app/methods",   copy=True)
+    .add_local_dir(str(_base / "benchmark"), "/app/benchmark", copy=True)
     .run_commands(
         "cd /app/methods/kivi_kernels && "
         "TORCH_CUDA_ARCH_LIST='8.0;8.6;9.0' python setup.py install 2>&1 | tail -5"
