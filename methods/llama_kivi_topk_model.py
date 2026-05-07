@@ -20,18 +20,21 @@ How the two methods compose inside the attention module:
     1. Compute attn_weights with KIVI kernels (same as LlamaAttention_KIVI).
     2. Divide the sequence into sink | middle | local regions.
     3. Soft-vote (softmax per head, sum across heads) to rank middle tokens.
-    4. Mask all but the top-K middle tokens to finfo.min before softmax.
-    5. Softmax → non-selected positions get ~0 weight automatically.
-    6. Compute output with KIVI V kernel — non-selected positions contribute
-       nothing because their softmax weight is ~0.
+    4. Identify the top-K middle token indices (_select_topk).
+    5. Gather attn_weights at [sink | top-K middle | local] indices → budget-size slice.
+    6. Softmax over budget positions only.
+    7. Dequantise ONLY the selected V rows (_gather_v) and do a small matmul.
+       Non-selected V tokens are never read from HBM.
 
   Benefits vs pure KIVI:
     - Quality: fewer low-relevance tokens pollute the context window.
-    - Attention: effective context length = n_sink + K + n_local per step.
+    - V bandwidth: proportional to budget (n_sink+K+n_local), not seq_len.
+      At 32 K context with budget=1664: ~20× fewer V token reads.
   Benefits vs pure TopK wrapper:
-    - Memory: KV stored quantised (4x at 4-bit, 8x at 2-bit vs FP16).
-    - Scoring: uses REAL Q, not a K-proxy — more accurate selection.
-    - No dequantise-to-FP16 step needed anywhere.
+    - Memory: KV stored quantised (4× at 4-bit, 8× at 2-bit vs FP16).
+    - Scoring: uses REAL Q@K scores, not a K-proxy — more accurate selection.
+  Note on K: Q@K^T still reads ALL quantised K (necessary to score them).
+    Only the V step is sparse.
 
 Config fields required (set on AutoConfig before from_pretrained):
     config.k_bits          : int  (2 or 4)
@@ -125,63 +128,101 @@ class LlamaAttention_KIVITopK(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size,           bias=config.attention_bias)
         self.rotary_emb = LlamaRotaryEmbedding(config=self.config)
 
-    # ── TopK mask ─────────────────────────────────────────────────────────────
+    # ── TopK selection ────────────────────────────────────────────────────────
 
-    def _apply_topk_mask(
+    def _select_topk(
         self,
         attn_weights: torch.Tensor,
         total_seq_len: int,
-    ) -> torch.Tensor:
+    ):
         """
-        Apply soft-vote top-K mask to attention scores before softmax.
+        Identify which token positions to attend to: sink | top-K middle | local.
 
-        attn_weights: (B, nh, 1, total_seq_len) — already scaled by
-                      1/sqrt(d) and with the causal mask applied.
+        attn_weights: (B, nh, 1, total_seq_len) — scaled Q@K^T with causal mask.
 
-        Regions:
-          [0 .. n_sink)                : sink — always kept, unchanged
-          [n_sink .. total-n_local)    : middle — keep top-K, mask rest to finfo.min
-          [total-n_local .. total)     : local — always kept, unchanged
-
-        If total_seq_len <= n_sink + K + n_local, returns unchanged
-        (no selection needed — the full context fits in budget).
+        Returns a 1-D LongTensor of absolute indices [0, total_seq_len) ordered
+        as [sink ... | selected_middle ... | local ...], or None when the full
+        context fits within the budget (no selection needed).
         """
         budget = self.topk_n_sink + self.topk_K + self.topk_n_local
         if total_seq_len <= budget:
-            return attn_weights
+            return None
 
         sink_end     = min(self.topk_n_sink, total_seq_len)
         recent_start = max(total_seq_len - self.topk_n_local, sink_end)
         middle_len   = recent_start - sink_end
 
         if middle_len <= 0:
-            return attn_weights
+            return None
 
-        # ── Soft vote: select top-K from middle region ───────────────────────
-        # Scores for middle tokens: (B, nh, 1, middle_len) → (nh, middle_len)
-        # We use the already-computed attention scores (real Q, real K)
-        # which is more accurate than the K-proxy used in the wrapper approach.
+        device = attn_weights.device
+
+        # Soft-vote: aggregate softmax scores across heads to rank middle tokens.
+        # Uses real Q@K^T scores — more accurate than a K-proxy.
         middle_scores = attn_weights[0, :, 0, sink_end:recent_start]  # (nh, M)
-        soft_scores   = F.softmax(middle_scores, dim=-1)               # (nh, M)
-        aggregated    = soft_scores.sum(dim=0)                         # (M,)
+        aggregated    = F.softmax(middle_scores, dim=-1).sum(dim=0)    # (M,)
 
-        k_actual  = min(self.topk_K, middle_len)
-        topk_idx  = aggregated.topk(k_actual).indices                  # (k_actual,)
+        k_actual      = min(self.topk_K, middle_len)
+        # Sort selected indices for sequential memory access during gather.
+        topk_rel_idx  = aggregated.topk(k_actual).indices.sort().values
+        middle_abs_idx = topk_rel_idx + sink_end
 
-        # Build the mask: finfo.min everywhere in middle except selected positions.
-        fmin = torch.finfo(attn_weights.dtype).min
-        mask = torch.full(
-            (1, 1, 1, middle_len),
-            fmin,
-            device=attn_weights.device,
-            dtype=attn_weights.dtype,
+        sink_idx  = torch.arange(sink_end, device=device)
+        local_idx = torch.arange(recent_start, total_seq_len, device=device)
+        return torch.cat([sink_idx, middle_abs_idx, local_idx])
+
+    def _gather_v(
+        self,
+        selected_idx: torch.Tensor,
+        value_states_quant,
+        value_states_full: torch.Tensor,
+        value_scale,
+        value_mn,
+        kv_seq_len: int,
+    ) -> torch.Tensor:
+        """
+        Gather value vectors at selected_idx from the quantised + FP16 split.
+
+        V layout:
+          tokens [0 .. n_quant)          → value_states_quant (int32 packed along head_dim)
+          tokens [n_quant .. kv_seq_len) → value_states_full  (FP16 residual)
+
+        Only the selected rows are dequantised — V HBM reads scale with budget,
+        not with total sequence length.
+
+        Returns: (B, nh, len(selected_idx), head_dim) float16
+        """
+        from methods.kivi_kernels.new_pack import unpack_and_dequant_vcache
+
+        n_full  = value_states_full.shape[-2]
+        n_quant = kv_seq_len - n_full
+
+        B, nh   = value_states_full.shape[:2]
+        device  = value_states_full.device
+        budget  = selected_idx.shape[0]
+
+        V_sel = torch.empty(
+            B, nh, budget, self.head_dim,
+            dtype=value_states_full.dtype, device=device,
         )
-        mask[0, 0, 0, topk_idx] = 0.0   # keep selected positions
 
-        # Add mask to attn_weights (non-destructive clone for autograd safety).
-        out = attn_weights.clone()
-        out[:, :, :, sink_end:recent_start] = out[:, :, :, sink_end:recent_start] + mask
-        return out
+        quant_mask = selected_idx < n_quant
+        full_mask  = ~quant_mask
+
+        if quant_mask.any() and value_states_quant is not None:
+            q_idx   = selected_idx[quant_mask]
+            q_rows  = value_states_quant[:, :, q_idx, :]   # (B, nh, n_q_sel, D//fps)
+            s_rows  = value_scale[:, :, q_idx, :]           # (B, nh, n_q_sel, D//gs)
+            mn_rows = value_mn[:, :, q_idx, :]              # (B, nh, n_q_sel, D//gs)
+            V_sel[:, :, quant_mask, :] = unpack_and_dequant_vcache(
+                q_rows, s_rows, mn_rows, self.group_size, self.v_bits,
+            )
+
+        if full_mask.any():
+            f_idx = selected_idx[full_mask] - n_quant
+            V_sel[:, :, full_mask, :] = value_states_full[:, :, f_idx, :]
+
+        return V_sel
 
     # ── Forward ───────────────────────────────────────────────────────────────
 
@@ -271,44 +312,63 @@ class LlamaAttention_KIVITopK(nn.Module):
                     )
                 attn_weights = attn_weights + attention_mask
 
-            # ── Apply TopK selection mask ─────────────────────────────────────
-            # Non-selected middle tokens are set to finfo.min so their
-            # softmax weight is ~0.  Sink and local tokens are kept as-is.
-            attn_weights = self._apply_topk_mask(attn_weights, kv_seq_len)
-
-            # Clamp to representable range (handles -inf from causal / topk mask)
-            attn_weights = torch.max(
-                attn_weights,
-                torch.tensor(torch.finfo(attn_weights.dtype).min),
-            )
-            attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-
-            # ── Output: attn @ quantised V ────────────────────────────────────
-            # Append new value to FP16 residual buffer (tracks last R tokens)
+            # ── Output: attn @ V (sparse gather) ─────────────────────────────
+            # Append new V to FP16 residual so kv_seq_len positions align.
             value_states_full = torch.cat([value_states_full, value_states], dim=2)
             value_full_length = value_states_full.shape[-2]
 
-            if value_states_quant is None:
-                # No quantised V yet — attend over FP16 residual only
-                attn_output = torch.matmul(attn_weights, value_states_full)
+            # Find which token positions to attend to.
+            # Returns sorted absolute indices [sink|top-K middle|local], or None
+            # when the full context fits within the budget.
+            selected_idx = self._select_topk(attn_weights, kv_seq_len)
+
+            if selected_idx is not None:
+                # ── Sparse path ───────────────────────────────────────────────
+                # Gather attention weights at the selected positions only,
+                # then softmax over that budget-sized slice.
+                attn_weights_sel = attn_weights[:, :, :, selected_idx]   # (B,nh,1,budget)
+                attn_weights_sel = torch.max(
+                    attn_weights_sel,
+                    torch.tensor(torch.finfo(attn_weights_sel.dtype).min),
+                )
+                attn_weights_sel = F.softmax(
+                    attn_weights_sel, dim=-1, dtype=torch.float32,
+                ).to(query_states.dtype)
+
+                # Dequantise only the selected V rows — HBM reads ∝ budget.
+                V_sel = self._gather_v(
+                    selected_idx,
+                    value_states_quant, value_states_full,
+                    value_scale, value_mn,
+                    kv_seq_len,
+                )
+                attn_output = torch.matmul(attn_weights_sel, V_sel)      # (B,nh,1,D)
+
             else:
-                # Quantised V part:
-                #   cuda kernel: attn[:, :, :, :n_quant] × V_packed → (B,nh,1,D)
-                # Non-selected positions already have attn weight ~0, so they
-                # contribute nothing even though the kernel reads all V tokens.
-                attn_output = cuda_bmm_fA_qB_outer(
-                    self.group_size,
-                    attn_weights[:, :, :, :-value_full_length],
-                    value_states_quant,
-                    value_scale,
-                    value_mn,
-                    self.v_bits,
+                # ── Dense path: budget >= context, use KIVI kernels ───────────
+                attn_weights = torch.max(
+                    attn_weights,
+                    torch.tensor(torch.finfo(attn_weights.dtype).min),
                 )
-                # FP16 residual V part
-                attn_output += torch.matmul(
-                    attn_weights[:, :, :, -value_full_length:],
-                    value_states_full,
-                )
+                attn_weights = F.softmax(
+                    attn_weights, dim=-1, dtype=torch.float32,
+                ).to(query_states.dtype)
+
+                if value_states_quant is None:
+                    attn_output = torch.matmul(attn_weights, value_states_full)
+                else:
+                    attn_output = cuda_bmm_fA_qB_outer(
+                        self.group_size,
+                        attn_weights[:, :, :, :-value_full_length],
+                        value_states_quant,
+                        value_scale,
+                        value_mn,
+                        self.v_bits,
+                    )
+                    attn_output += torch.matmul(
+                        attn_weights[:, :, :, -value_full_length:],
+                        value_states_full,
+                    )
 
             # ── KIVI K flush: quantise residual when it reaches exactly R ─────
             if key_states_full.shape[-2] == self.residual_length:
