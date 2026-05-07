@@ -15,8 +15,8 @@ methods:
   kivi:
     enabled: true
     configs:
-      - {bits: 4, residual_length: 128}
-      - {bits: 2, residual_length: 128}
+      - {bits: 4, residual_length: 128, group_size: 32}
+      - {bits: 2, residual_length: 128, group_size: 32}
 
   xkv:
     enabled: true
@@ -35,9 +35,9 @@ methods:
   topk:
     enabled: true
     configs:
-      - {K: 256,  refresh_interval: 0}
-      - {K: 512,  refresh_interval: 50}
-      - {K: 1024, refresh_interval: 50}
+      - {K: 512,  n_sink: 128, n_local: 512, refresh_interval: 0}
+      - {K: 1024, n_sink: 128, n_local: 512, refresh_interval: 50}
+      - {K: 2048, n_sink: 128, n_local: 512, refresh_interval: 50}
 
 datasets:
   sequence_lengths: [512, 2048, 8192]

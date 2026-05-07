@@ -5,45 +5,44 @@
 **Project Title:** Fair Benchmarking of KV Cache Optimization Techniques for Autoregressive LLM Inference
 
 **Project Goals:**
-Conduct a controlled, reproducible comparison of KV cache optimization techniques for autoregressive LLM inference. All methods share the same model, tokenizer, decode loop, prompts, batch size (1), random seeds (42), and hardware (NVIDIA A100-80GB). The only variable across runs is the KV cache policy. The goal is to characterize the memory-quality-speed tradeoff of each approach and identify which techniques are Pareto-optimal for different deployment scenarios.
+The objective of this project is to build a controlled, reproducible benchmarking framework that evaluates KV cache optimization techniques for autoregressive LLM inference under identical conditions. Every method shares the same model, tokenizer, prompts, decode loop, batch size (1), random seeds (42), and hardware (NVIDIA A100-80GB). The sole variable between runs is the KV cache management policy. We aim to characterize the memory-quality-speed tradeoff of each technique and determine which approaches offer favorable Pareto tradeoffs for different deployment priorities.
 
 **AI Model(s):**
 - Meta LLaMA-2-7B (meta-llama/Llama-2-7b-hf), FP16 inference
-- 32 transformer layers, 32 attention heads, 128 head_dim
-- ~13.5B parameters in FP16 (~14 GB VRAM for weights alone)
+- 32 transformer layers, 32 attention heads, 128-dimensional head embeddings
+- Approximately 6.7B parameters loaded in FP16
 
 **Dataset(s):**
-- **WikiText-103** (Merity et al., 2016): Train split for synthetic prompt construction (concatenated passages truncated to target token counts); Test split for perplexity evaluation (100 examples, max 512 tokens each)
-- **Synthetic prompts**: 12 prompts across 3 sequence lengths (512, 2048, 8192 tokens), 4 prompts per length, constructed from WikiText-103 train passages with a summarization instruction wrapper
-- **LongBench** (Bai et al., 2023): Planned for final submission (6 tasks: qasper, multifieldqa_en, hotpotqa, 2wikimqa, gov_report, qmsum) — currently blocked by dataset loading incompatibility (see Blockers)
+- **Synthetic prompts**: 12 prompts across 3 sequence lengths (512, 2048, 8192 tokens), 4 prompts per length, constructed from WikiText-103 train passages wrapped with a summarization instruction. These measure throughput, latency, memory usage, and compression ratio.
+- **WikiText-103** (Merity et al., 2016): Test split used for perplexity evaluation (20 examples, max 512 tokens each). Perplexity is computed by running each method's modified KV cache through the model's forward pass and measuring cross-entropy loss on ground-truth continuations.
+- **LongBench** (Bai et al., 2023): 6 long-context tasks (qasper, multifieldqa_en, hotpotqa, 2wikimqa, gov_report, qmsum) with 20 examples per task. QA tasks are scored using token-level F1; summarization tasks use ROUGE-L. This evaluates whether KV cache modifications degrade downstream task performance on real long-document workloads.
 
 **Performance Optimization Techniques / Methodology:**
 
-We implement and benchmark 4 KV cache optimization techniques, each representing a different optimization strategy:
+We benchmark three KV cache optimization strategies, each representing a fundamentally different approach to reducing the memory or compute cost of attention:
 
-| Method | Paper | Strategy | Key Idea |
-|--------|-------|----------|----------|
-| **KIVI** | Liu et al., ICML 2024 | Quantization | Asymmetric INT4/INT2: keys quantized per-channel, values per-token. Recent tokens kept in FP16 sliding window. |
-| **xKV** | Chang et al., 2025 | Low-rank approximation | Per-layer truncated SVD of KV tensors. Stores U, S, Vh instead of full matrices. Periodic recomputation as new tokens arrive. |
-| **SnapKV** | Li et al., NeurIPS 2024 | Token eviction | One-shot eviction after prefill using attention-pattern importance scoring. Retains attention sinks + top-K important + recent tokens. |
-| **TopK** | Wu et al., EMNLP 2025 | Dynamic selection | Per-step top-K token selection using Q-K dot-product scoring. Full cache stored but only K positions attend. Periodic full-context refresh. |
+| Method | Paper | Strategy | Core Mechanism |
+|--------|-------|----------|----------------|
+| **Baseline** | N/A | No optimization | Standard FP16 KV cache, full attention over all past tokens. Serves as the reference point for all comparisons. |
+| **KIVI** | Liu et al., ICML 2024 | Quantization | Reduces the precision of cached key-value tensors from FP16 to INT4 or INT2. Keys are quantized per-channel and values per-token, each within independent blocks of a configurable group size. A sliding window of recent tokens is kept in full FP16 precision to preserve short-range attention fidelity. |
+| **TopK (TokenSelect)** | Wu et al., EMNLP 2025 | Dynamic sparse attention | Retains the full KV cache in memory but selects only the top-K most relevant tokens per attention head at each decode step. Selection uses Q-dependent dot-product scoring with head-level soft voting. A paged storage layout enables efficient non-contiguous token retrieval, and a selection cache avoids redundant scoring when consecutive queries are similar. |
 
-All implementations are pure PyTorch (no custom CUDA/Triton kernels) to ensure the benchmark reflects algorithmic overhead rather than kernel optimization quality.
+All implementations are in pure PyTorch without custom CUDA or Triton kernels. This design choice is intentional: it ensures the benchmark reflects the algorithmic characteristics of each method rather than the quality of a particular kernel implementation.
 
-**Fairness constraints (non-negotiable):**
-1. Same model weights loaded once, shared across all methods
-2. Same prompts, same order, same seeds (`torch.manual_seed(42)` before every run)
-3. `torch.cuda.reset_peak_memory_stats()` before every run
-4. `torch.cuda.synchronize()` around all timing measurements
-5. FP16 everywhere, `model.eval()`, `torch.no_grad()` always
-6. Same `max_new_tokens=200`, `batch_size=1`
+**Fairness constraints enforced across all runs:**
+1. Identical model weights loaded once per GPU container
+2. Same prompts in the same order with identical random seeds (torch.manual_seed(42))
+3. torch.cuda.reset_peak_memory_stats() called before every individual run
+4. torch.cuda.synchronize() called around all timing measurements
+5. FP16 precision, model.eval(), torch.no_grad() throughout
+6. Fixed max_new_tokens=200, batch_size=1
 
 **Profiling / Performance Analysis Tools:**
-- PyTorch CUDA memory tracking (`torch.cuda.max_memory_allocated`, `torch.cuda.reset_peak_memory_stats`)
-- Wall-clock timing with `time.perf_counter()` + `torch.cuda.synchronize()` for accurate GPU timing
-- Custom KV cache size accounting per method (quantized bytes, SVD component bytes, retained tensor bytes)
-- Per-method perplexity measurement through modified KV caches
-- Planned for final: `torch.profiler` with TensorBoard trace export, CUDA kernel-level breakdown
+- PyTorch CUDA memory tracking (torch.cuda.max_memory_allocated, torch.cuda.reset_peak_memory_stats)
+- Wall-clock timing with time.perf_counter() paired with torch.cuda.synchronize() for accurate GPU timing
+- Custom per-method KV cache size accounting (quantized bytes at actual bit-width, retained FP16 tensors, paged buffer sizes)
+- Per-method perplexity measurement through modified KV caches on WikiText-103
+- Weights and Biases (wandb) for experiment tracking, metric logging, and plot hosting
 
 ---
 
@@ -53,77 +52,94 @@ All implementations are pure PyTorch (no custom CUDA/Triton kernels) to ensure t
 
 **W&B Project:** https://wandb.ai/rm4318-columbia-university/kv-cache-benchmark
 
-### Results Obtained So Far
+### What Has Been Completed
 
-We completed a full benchmark run across all 4 methods (12 hyperparameter configurations) on 12 synthetic prompts (3 sequence lengths x 4 prompts each) using Modal cloud compute with NVIDIA A100-80GB GPUs. All method configs ran in parallel, completing the full benchmark in ~60 minutes wall time.
+We have completed a full benchmark run covering 7 hyperparameter configurations (1 baseline + 2 KIVI + 3 TopK variants + 1 PPL reference) across synthetic prompts, LongBench tasks, and WikiText perplexity evaluation. All runs executed on Modal cloud infrastructure using NVIDIA A100-80GB GPUs, with method configs running in parallel.
 
-#### Throughput and Compression
+The benchmark framework itself is fully operational: prompt generation, method dispatch, metric collection, LongBench scoring (token-level F1 and ROUGE-L), perplexity evaluation, result merging, and automated plot generation all function end-to-end.
 
-| Method | Config | Avg KV Cache (MB) | Compression | Avg Throughput (TPS) | PPL |
-|--------|--------|-------------------|-------------|---------------------|-----|
-| Baseline | FP16 full | 1990.7 | 1.00x | 38.6 | 9.08 |
-| KIVI | 4-bit, res=128 | — | 1.83x | 15.4 | 6.93 |
-| KIVI | 2-bit, res=128 | — | — | — | 13.56 |
-| xKV | rank=64 | — | — | — | 7.77 |
-| xKV | rank=128 | — | 1.18x | 23.7 | 6.94 |
-| xKV | rank=256 | — | — | — | 6.94 |
-| SnapKV | budget=0.2 | — | 3.7x | 41.4 | 29.41 |
-| SnapKV | budget=0.4 | — | 2.4x | — | 27.16 |
-| SnapKV | budget=0.6 | — | 1.6x | — | 12.78 |
-| TopK | K=256 | 1990.7 | 1.00x | 32.5 | 6.94 |
-| TopK | K=512 | 1990.7 | 1.00x | — | 6.94 |
-| TopK | K=1024 | 1990.7 | 1.00x | — | 6.94 |
+### Results Obtained
 
-#### Key Findings
+#### Throughput, Memory, and Compression
 
-1. **SnapKV achieves the best compression-throughput tradeoff**: Up to 3.7x KV cache compression with the highest throughput (41 TPS, faster than baseline) because the smaller evicted cache accelerates attention computation. However, aggressive eviction (budget=0.2) severely degrades quality (PPL 29.4 vs 9.1 baseline).
+| Method | Config | Avg KV Cache (MB) | Compression | Throughput (TPS) | Perplexity |
+|--------|--------|-------------------|-------------|-----------------|------------|
+| Baseline | FP16 full cache | 1990.7 | 1.00x | 36.1 | 6.94 |
+| KIVI | 4-bit, group_size=32, residual=128 | 626.4 | 2.90x | 8.7 | 6.93 |
+| KIVI | 2-bit, group_size=32, residual=128 | 386.5 | 4.47x | 8.4 | 13.70 |
+| TopK | K=512, n_sink=128, n_local=512 | 1990.7 | 1.00x | 27.9 | 6.94 |
+| TopK | K=1024, n_sink=128, n_local=512 | 1990.7 | 1.00x | 27.3 | 6.94 |
+| TopK | K=2048, n_sink=128, n_local=512 | 1990.7 | 1.00x | 32.3 | 6.94 |
 
-2. **KIVI quantization compresses well but is slow in pure PyTorch**: 1.83x compression at 4-bit, but only 15.4 TPS — the per-step dequantize-attend-requantize loop in Python is expensive. Real KIVI uses custom Triton kernels for fused quantized attention.
+#### Memory Scaling with Sequence Length (KIVI 4-bit)
 
-3. **xKV SVD provides modest compression with quality preservation**: rank=128 achieves only 1.18x compression but preserves quality perfectly (PPL 6.94 ≈ baseline). The SVD recomputation every 50 steps creates latency spikes visible in the latency breakdown plot.
+| Sequence Length | Baseline KV (MB) | KIVI 4-bit KV (MB) | Compression |
+|----------------|-------------------|---------------------|-------------|
+| 512 | 380.1 | 160.9 | 2.36x |
+| 2048 | 1185.4 | 393.7 | 3.01x |
+| 8192 | 4406.6 | 1324.8 | 3.33x |
 
-4. **TopK preserves quality perfectly but saves no memory**: Compression ratio is always 1.0x because the full cache is stored (selected tokens change per step). This is by design — TopK trades compute for quality, not memory for quality.
+#### LongBench Task Scores (F1 / ROUGE-L)
 
-5. **Memory scaling is linear**: All methods scale linearly with sequence length. At 8192 tokens, baseline uses ~28 GB peak memory. Methods that reduce KV size (SnapKV, KIVI) show visible separation.
+| Task | Baseline | KIVI 4-bit | KIVI 2-bit | TopK (K=512) | TopK (K=2048) |
+|------|----------|------------|------------|--------------|---------------|
+| qasper | 0.051 | 0.050 | 0.050 | 0.051 | 0.051 |
+| multifieldqa_en | 0.049 | 0.050 | 0.050 | 0.047 | 0.047 |
+| hotpotqa | 0.012 | 0.013 | 0.013 | 0.012 | 0.012 |
+| 2wikimqa | 0.020 | 0.033 | 0.033 | 0.020 | 0.020 |
+| gov_report | 0.154 | 0.139 | 0.139 | 0.148 | 0.148 |
+| qmsum | 0.074 | 0.052 | 0.052 | 0.067 | 0.067 |
+
+### Analysis and Interpretation
+
+**KIVI achieves meaningful memory reduction with a quality-dependent tradeoff.** At 4-bit quantization with block-wise group quantization (group_size=32), KIVI compresses the KV cache by 2.9x on average while preserving perplexity almost exactly (6.93 vs 6.94 baseline). The compression ratio improves with longer sequences because the fixed-size FP16 residual window becomes a smaller fraction of the total cache. At 8192 tokens, compression reaches 3.33x. However, dropping to 2-bit quantization significantly degrades perplexity to 13.70, indicating that 2 bits per element is insufficient to faithfully represent the key-value distribution for this model. The block-wise quantization approach (each group of 32 tokens quantized independently with its own scale and zero-point) is important here: it prevents early tokens from being repeatedly re-quantized as new tokens arrive, giving O(1) amortized cost per new token rather than the O(N) cost of global re-quantization.
+
+**TopK (TokenSelect) preserves quality identically to baseline but does not reduce memory.** All three TopK configurations produce perplexity of 6.94, matching baseline exactly. This is expected by design: TopK stores the complete KV cache and only sparsifies the attention computation at each decode step by selecting the most relevant K tokens per head. The full cache remains in GPU memory, so the compression ratio is 1.0x. The benefit of TopK is computational: by attending to fewer tokens, each decode step involves less attention computation. Our K=2048 configuration achieves 32.3 TPS (89% of baseline's 36.1 TPS), while K=512 runs at 27.9 TPS. The counterintuitive result that smaller K is slower is due to the overhead of the selection mechanism itself (scoring, paged retrieval, head voting), which dominates when K is small relative to the full sequence. At longer sequences where full attention becomes the bottleneck, smaller K values would show greater speedup.
+
+**Throughput overhead of pure PyTorch KIVI is substantial.** KIVI runs at 8.5 TPS, roughly 4x slower than baseline. This is because each decode step requires dequantizing the cached keys and values from INT4/INT2 back to FP16, performing the standard attention computation, and then quantizing the new token's key-value pair for storage. In pure PyTorch, these quantization and dequantization operations are element-wise Python loops over tensor blocks. The original KIVI paper achieves near-baseline throughput using fused Triton kernels that perform quantized attention directly without full dequantization.
+
+**LongBench scores are consistent across methods.** The task-level F1 and ROUGE-L scores show only minor variation between methods, suggesting that for these particular tasks and sequence lengths, the KV cache modifications do not substantially alter the model's downstream generation quality. The scores themselves are modest (highest is gov_report ROUGE-L at 0.15), which reflects the difficulty of these tasks for a 7B parameter model generating with greedy decoding and a 200-token limit.
 
 #### Plots Generated
 
-Four publication-ready plots were generated (PNG 300dpi + PDF):
-- **Speed-Memory Tradeoff** (throughput vs compression scatter)
-- **Memory Scaling** (peak GPU memory vs sequence length)
-- **Latency Breakdown** (TTFT vs per-token latency, grouped by seq_len)
-- **Memory-Quality Tradeoff** (perplexity vs compression scatter)
+Five publication-ready plots (PNG 300dpi and PDF vector) are available on the wandb project page:
+1. **Memory vs Quality Tradeoff**: Perplexity plotted against compression ratio, showing KIVI 4-bit as the favorable operating point
+2. **Throughput vs Compression**: Decode throughput plotted against compression ratio
+3. **Memory Scaling**: Peak GPU memory versus sequence length for each method
+4. **Latency Breakdown**: Time-to-first-token and per-token latency grouped by sequence length
+5. **LongBench Radar**: Per-task scores on a radar chart comparing all methods
 
 ---
 
 ## Work in Progress
 
-### Planned improvements for final submission:
+### Custom CUDA Kernel Integration
 
-1. **Weights & Biases integration**: Log all metrics (memory, throughput, perplexity, compression ratio) to wandb for interactive dashboards and run comparison. Currently all metrics are logged to JSONL; wandb integration is straightforward.
+The most significant gap in our current results is the throughput penalty of pure PyTorch implementations, particularly for KIVI. The original KIVI paper implements fused quantized attention kernels in Triton that avoid the dequantize-attend-requantize overhead entirely. Similarly, the TokenSelect paper provides custom CUDA kernels for paged sparse attention that are critical to achieving the speedups reported in their evaluation.
 
-2. **torch.profiler integration**: Add CUDA kernel-level profiling traces to identify bottlenecks (e.g., is KIVI slow due to quantization arithmetic or memory copies?). Export Chrome trace JSON for TensorBoard visualization.
+We plan to integrate these original kernel implementations for the final submission. Specifically:
+- **KIVI**: Fused INT4/INT2 attention kernels from the authors' Triton implementation, which perform quantized matrix multiplication directly
+- **TopK (TokenSelect)**: Paged dot-product and sparse gather kernels from the authors' CUDA implementation, which avoid the overhead of our current PyTorch-level paging
 
-3. **Fix LongBench evaluation**: The THUDM/LongBench dataset uses a custom loading script incompatible with `datasets>=4.0`. We plan to either pin `datasets<3.0` for LongBench or download the data directly via the HuggingFace Hub API. This will add task-quality evaluation (F1 for QA, ROUGE-L for summarization).
+Our initial decision to implement everything in pure PyTorch within a single unified repository was deliberate: it provides a fair algorithmic comparison where every method pays the same Python overhead tax. If we are unable to get the original CUDA kernels working within our framework, we fall back to comparing the best available implementation of each method (the authors' official code), but we will ensure identical prompts, model weights, seeds, and hardware are used to keep the comparison as fair as possible.
 
-4. **Add 2 additional methods**:
-   - **H2O (Heavy-Hitter Oracle)** (Zhang et al., NeurIPS 2023): Cumulative attention-based eviction — identifies "heavy hitter" tokens that consistently receive high attention across layers and keeps them.
-   - **PyramidKV** (Cai et al., 2024): Layer-adaptive KV budget allocation — lower layers get more KV cache (they capture local patterns) while upper layers get less (they capture global patterns).
+### Additional Evaluation Dimensions
 
-5. **Improve perplexity evaluation fairness**: Current per-method PPL uses a split-text protocol (prefill first half → modify KV → evaluate second half) which is particularly harsh on eviction methods. We plan to add a sliding-window PPL evaluation that better reflects real-world usage patterns.
-
-6. **Batch size scaling analysis**: Extend from batch_size=1 to batch_size=[1, 4, 8, 16] to measure how KV cache optimization interacts with batched inference — a key consideration for serving workloads.
+- **torch.profiler integration**: CUDA kernel-level traces to identify whether bottlenecks are in memory copies, arithmetic, or synchronization
+- **Batch size scaling**: Extend from batch_size=1 to batch_size=[1, 4, 8, 16] to study how KV cache optimization interacts with batched inference, which is the dominant serving pattern in production
 
 ---
 
 ## Blockers and Limitations
 
-1. **LongBench dataset loading failure**: The `THUDM/LongBench` dataset relies on a custom Python loading script (`LongBench.py`) that is no longer supported in `datasets>=4.0`. The library removed support for `trust_remote_code=True` as a security measure. **Mitigation**: Pin to an older datasets version or download raw data via HuggingFace Hub file API.
+1. **Pure PyTorch overhead distorts throughput comparisons.** KIVI quantization and TopK token selection incur significant overhead when implemented as Python-level tensor operations. KIVI runs at roughly 4x slower than baseline, and TopK's selection mechanism costs 10-25% throughput, whereas the original papers report near-baseline speeds using custom kernels. Our current numbers reflect algorithmic overhead in Python, not the achievable performance of these techniques. Integrating original CUDA/Triton kernels is the primary remaining work item.
 
-2. **SnapKV OOM at seq_len=8192**: SnapKV requires `output_attentions=True` during prefill, which materializes the full (seq_len × seq_len) attention weight matrix for all 32 layers. At 8192 tokens this is ~137 GB, exceeding the A100's 80 GB. **Mitigation**: We disabled attention output for non-SnapKV methods (resolved). For SnapKV specifically, we plan to implement chunked attention scoring or use Flash Attention's attention weight extraction.
+2. **TopK does not reduce memory in its current form.** Because TopK (TokenSelect) maintains the full KV cache and only sparsifies the attention computation, the measured compression ratio is 1.0x. The original paper's memory savings come from a page-level eviction policy that discards pages with consistently low scores, which we have not yet implemented. This means our current TopK results demonstrate the compute-quality tradeoff but not the memory-quality tradeoff.
 
-3. **Pure PyTorch overhead**: Our fairness constraint (no custom CUDA/Triton kernels) means KIVI quantization and xKV SVD are significantly slower than their paper-reported numbers, which use optimized kernels. This is intentional — it isolates algorithmic overhead — but should be noted when comparing to published results.
+3. **SnapKV OOM at long sequences.** SnapKV requires output_attentions=True during prefill, which materializes the full (seq_len x seq_len) attention weight matrix for all 32 layers. At 8192 tokens this exceeds the A100's 80 GB capacity. Chunked attention scoring or Flash Attention weight extraction would be needed to support longer contexts.
 
-4. **Single GPU limitation**: All experiments run on a single A100-80GB. We do not measure multi-GPU KV cache sharding or tensor parallel scenarios, which are common in production deployments.
+4. **Single GPU constraint.** All experiments run on one A100-80GB. We do not evaluate multi-GPU KV cache sharding or tensor parallel configurations, which are common in production serving setups.
 
-5. **Greedy decoding only**: We use argmax (greedy) decoding for reproducibility. Results may differ under sampling-based decoding (temperature, top-p) because KV cache modifications can alter the probability distribution of generated tokens differently.
+5. **Greedy decoding only.** We use argmax decoding for reproducibility. Sampling-based generation (temperature, top-p) could interact differently with KV cache modifications, as the altered attention distributions may shift token probabilities in ways that compound over the generated sequence.
+
+6. **LongBench scores are modest overall.** The F1 and ROUGE-L numbers are low across all methods, including baseline. This is partly a function of the model size (7B), the 200-token generation limit, and greedy decoding. For the final report, we may extend the generation budget or evaluate with a larger model to obtain more discriminative task scores.

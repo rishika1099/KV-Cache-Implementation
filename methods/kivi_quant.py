@@ -6,6 +6,7 @@ def quantize_per_channel(tensor, bits):
     """
     Quantize along head_dim (channel) dimension.
     tensor shape: (batch, heads, seq_len, head_dim)
+    Each (batch, head, token) gets its own scale/zero across channels.
     """
     min_val = tensor.min(dim=-1, keepdim=True).values
     max_val = tensor.max(dim=-1, keepdim=True).values
@@ -24,6 +25,7 @@ def quantize_per_token(tensor, bits):
     """
     Quantize along seq_len (token) dimension.
     tensor shape: (batch, heads, seq_len, head_dim)
+    Each (batch, head, channel) gets its own scale/zero across tokens.
     """
     min_val = tensor.min(dim=-2, keepdim=True).values
     max_val = tensor.max(dim=-2, keepdim=True).values
@@ -44,21 +46,78 @@ def dequantize(quantized, scale, zero):
 
 class KIVIMethod(MethodWrapper):
     """
-    KIVI: Asymmetric KV cache quantization.
+    KIVI: Asymmetric KV cache quantization with block-wise group quantization.
 
-    Inspired by: KIVI (Liu et al., ICML 2024) —
+    Implements all three core concepts from Liu et al. (ICML 2024):
     "A Tuning-Free Asymmetric 2bit Quantization for KV Cache"
 
-    Keys have outliers along channel dimension → quantize per-channel.
-    Values have outliers along token dimension → quantize per-token.
-    Keep most recent `residual_length` tokens in FP16 (sliding window).
+    1. Asymmetric quantization strategies:
+       - Keys: per-channel (dim=-1, head_dim axis) — captures channel outliers
+       - Values: per-token (dim=-2, seq_len axis) — captures token outliers
+
+    2. Residual window (hybrid precision):
+       - Most recent `residual_length` tokens kept in FP16
+       - Historical tokens quantized to `bits`-bit
+       - Oldest residual token evicted to quantized cache when window overflows
+
+    3. Block-wise / group-wise quantization (NEW):
+       - Historical tokens organized into blocks of `group_size` tokens
+       - Each block has independent scale and zero-point parameters
+       - When tokens overflow from residual, they accumulate in an FP16 buffer
+       - When buffer reaches `group_size`, it is quantized as a NEW block
+       - Existing blocks are NEVER dequantized and re-quantized
+       - O(1) per-token amortized cost instead of O(N) re-quantization
+       - Better accuracy: scale parameters aren't skewed by distant tokens
+
     Pure PyTorch — no Triton/CUDA kernels.
     """
 
-    def __init__(self, bits=4, residual_length=128):
+    def __init__(self, bits=4, residual_length=128, group_size=32):
         self.bits = bits
         self.residual_length = residual_length
-        self.cache = {}  # layer_idx -> dict with quantized state
+        self.group_size = group_size
+        self.cache = {}  # layer_idx -> dict with block-wise state
+
+    # ── Block-wise quantization helpers ───────────────────────────────────────
+
+    def _quantize_blocks_per_channel(self, tensor):
+        """
+        Split tensor into blocks of group_size along seq_len,
+        quantize each block independently with per-channel parameters.
+        Returns list of (quantized, scale, zero) tuples.
+        """
+        seq_len = tensor.shape[2]
+        blocks = []
+        for start in range(0, seq_len, self.group_size):
+            end = min(start + self.group_size, seq_len)
+            block = tensor[:, :, start:end, :]
+            q, s, z = quantize_per_channel(block, self.bits)
+            blocks.append((q, s, z))
+        return blocks
+
+    def _quantize_blocks_per_token(self, tensor):
+        """
+        Split tensor into blocks of group_size along seq_len,
+        quantize each block independently with per-token parameters.
+        Returns list of (quantized, scale, zero) tuples.
+        """
+        seq_len = tensor.shape[2]
+        blocks = []
+        for start in range(0, seq_len, self.group_size):
+            end = min(start + self.group_size, seq_len)
+            block = tensor[:, :, start:end, :]
+            q, s, z = quantize_per_token(block, self.bits)
+            blocks.append((q, s, z))
+        return blocks
+
+    def _dequantize_blocks(self, blocks):
+        """Dequantize all blocks and concatenate along seq_len."""
+        if not blocks:
+            return None
+        pieces = [dequantize(q, s, z) for q, s, z in blocks]
+        return torch.cat(pieces, dim=2)
+
+    # ── Prefill ───────────────────────────────────────────────────────────────
 
     def process_prefill(self, past_key_values, attention_weights=None):
         self.cache = {}
@@ -66,17 +125,23 @@ class KIVIMethod(MethodWrapper):
 
         for layer_idx, layer_kv in enumerate(past_key_values):
             k, v = layer_kv[0].half(), layer_kv[1].half()
-            # k/v shape: (batch, heads, seq_len, head_dim)
-
             seq_len = k.shape[2]
 
             if seq_len <= self.residual_length:
-                # Entire sequence fits in residual — keep as FP16, nothing to quantize
+                # Entire sequence fits in residual — keep as FP16
                 res_k = k.to(torch.float16)
                 res_v = v.to(torch.float16)
                 self.cache[layer_idx] = {
-                    'quantized_k': None, 'scale_k': None, 'zero_k': None,
-                    'quantized_v': None, 'scale_v': None, 'zero_v': None,
+                    'k_blocks': [],
+                    'v_blocks': [],
+                    'overflow_k': torch.empty(
+                        (k.shape[0], k.shape[1], 0, k.shape[3]),
+                        dtype=torch.float16, device=k.device,
+                    ),
+                    'overflow_v': torch.empty(
+                        (v.shape[0], v.shape[1], 0, v.shape[3]),
+                        dtype=torch.float16, device=v.device,
+                    ),
                     'residual_k': res_k,
                     'residual_v': res_v,
                 }
@@ -89,40 +154,47 @@ class KIVIMethod(MethodWrapper):
             res_k = k[:, :, -self.residual_length:, :].to(torch.float16)
             res_v = v[:, :, -self.residual_length:, :].to(torch.float16)
 
-            # Quantize historical: keys per-channel, values per-token
-            q_k, s_k, z_k = quantize_per_channel(hist_k, self.bits)
-            q_v, s_v, z_v = quantize_per_token(hist_v, self.bits)
+            # Block-wise quantization of historical tokens
+            k_blocks = self._quantize_blocks_per_channel(hist_k)
+            v_blocks = self._quantize_blocks_per_token(hist_v)
 
             self.cache[layer_idx] = {
-                'quantized_k': q_k, 'scale_k': s_k, 'zero_k': z_k,
-                'quantized_v': q_v, 'scale_v': s_v, 'zero_v': z_v,
+                'k_blocks': k_blocks,
+                'v_blocks': v_blocks,
+                'overflow_k': torch.empty(
+                    (k.shape[0], k.shape[1], 0, k.shape[3]),
+                    dtype=torch.float16, device=k.device,
+                ),
+                'overflow_v': torch.empty(
+                    (v.shape[0], v.shape[1], 0, v.shape[3]),
+                    dtype=torch.float16, device=v.device,
+                ),
                 'residual_k': res_k,
                 'residual_v': res_v,
             }
 
-            # Reconstruct for the model: dequantized historical + residual
-            deq_k = dequantize(q_k, s_k, z_k)
-            deq_v = dequantize(q_v, s_v, z_v)
+            # Reconstruct for the model
+            deq_k = self._dequantize_blocks(k_blocks)
+            deq_v = self._dequantize_blocks(v_blocks)
             reconstructed_k = torch.cat([deq_k, res_k], dim=2)
             reconstructed_v = torch.cat([deq_v, res_v], dim=2)
             result.append((reconstructed_k, reconstructed_v))
 
         return tuple(result)
 
+    # ── Decode step ───────────────────────────────────────────────────────────
+
     def process_step(self, past_key_values, step, attention_weights=None):
         result = []
 
         for layer_idx, layer_kv in enumerate(past_key_values):
             k, v = layer_kv[0], layer_kv[1]
-            # HF appends the new token to past_key_values — last position is new token
 
             if layer_idx not in self.cache:
-                # Fallback: no cache state, return as-is
                 result.append((k, v))
                 continue
 
             state = self.cache[layer_idx]
-            # The new token is the last position in k/v
             new_k = k[:, :, -1:, :].to(torch.float16)
             new_v = v[:, :, -1:, :].to(torch.float16)
 
@@ -130,50 +202,59 @@ class KIVIMethod(MethodWrapper):
             res_k = torch.cat([state['residual_k'], new_k], dim=2)
             res_v = torch.cat([state['residual_v'], new_v], dim=2)
 
-            # If residual exceeds residual_length, move oldest token to quantized cache
+            # If residual exceeds limit, evict oldest token to overflow buffer
             if res_k.shape[2] > self.residual_length:
-                overflow_k = res_k[:, :, :1, :].half()
-                overflow_v = res_v[:, :, :1, :].half()
+                evict_k = res_k[:, :, :1, :]
+                evict_v = res_v[:, :, :1, :]
                 res_k = res_k[:, :, 1:, :]
                 res_v = res_v[:, :, 1:, :]
 
-                if state['quantized_k'] is None:
-                    # Initialize quantized cache with the overflow token
-                    q_k, s_k, z_k = quantize_per_channel(overflow_k, self.bits)
-                    q_v, s_v, z_v = quantize_per_token(overflow_v, self.bits)
-                else:
-                    # Dequantize existing, append overflow, re-quantize
-                    existing_k = dequantize(
-                        state['quantized_k'], state['scale_k'], state['zero_k']
-                    ).half()
-                    existing_v = dequantize(
-                        state['quantized_v'], state['scale_v'], state['zero_v']
-                    ).half()
-                    combined_k = torch.cat([existing_k, overflow_k], dim=2)
-                    combined_v = torch.cat([existing_v, overflow_v], dim=2)
-                    q_k, s_k, z_k = quantize_per_channel(combined_k, self.bits)
-                    q_v, s_v, z_v = quantize_per_token(combined_v, self.bits)
+                # Append evicted token to overflow buffer
+                state['overflow_k'] = torch.cat(
+                    [state['overflow_k'], evict_k], dim=2
+                )
+                state['overflow_v'] = torch.cat(
+                    [state['overflow_v'], evict_v], dim=2
+                )
 
-                state['quantized_k'] = q_k
-                state['scale_k'] = s_k
-                state['zero_k'] = z_k
-                state['quantized_v'] = q_v
-                state['scale_v'] = s_v
-                state['zero_v'] = z_v
+                # When overflow reaches group_size, quantize as a new block
+                # Existing blocks are NEVER re-quantized (O(1) amortized)
+                if state['overflow_k'].shape[2] >= self.group_size:
+                    block_k = state['overflow_k'][:, :, :self.group_size, :]
+                    block_v = state['overflow_v'][:, :, :self.group_size, :]
+
+                    q_k, s_k, z_k = quantize_per_channel(block_k, self.bits)
+                    q_v, s_v, z_v = quantize_per_token(block_v, self.bits)
+
+                    state['k_blocks'].append((q_k, s_k, z_k))
+                    state['v_blocks'].append((q_v, s_v, z_v))
+
+                    # Keep any remaining overflow beyond group_size
+                    state['overflow_k'] = state['overflow_k'][:, :, self.group_size:, :]
+                    state['overflow_v'] = state['overflow_v'][:, :, self.group_size:, :]
 
             state['residual_k'] = res_k
             state['residual_v'] = res_v
 
-            # Reconstruct full KV for model
-            if state['quantized_k'] is not None:
-                deq_k = dequantize(state['quantized_k'], state['scale_k'], state['zero_k'])
-                deq_v = dequantize(state['quantized_v'], state['scale_v'], state['zero_v'])
-                full_k = torch.cat([deq_k, res_k], dim=2)
-                full_v = torch.cat([deq_v, res_v], dim=2)
-            else:
-                full_k = res_k
-                full_v = res_v
+            # Reconstruct full KV: quantized blocks + overflow (FP16) + residual
+            parts_k = []
+            parts_v = []
 
+            if state['k_blocks']:
+                deq_k = self._dequantize_blocks(state['k_blocks'])
+                deq_v = self._dequantize_blocks(state['v_blocks'])
+                parts_k.append(deq_k)
+                parts_v.append(deq_v)
+
+            if state['overflow_k'].shape[2] > 0:
+                parts_k.append(state['overflow_k'])
+                parts_v.append(state['overflow_v'])
+
+            parts_k.append(res_k)
+            parts_v.append(res_v)
+
+            full_k = torch.cat(parts_k, dim=2)
+            full_v = torch.cat(parts_v, dim=2)
             result.append((full_k, full_v))
 
         return tuple(result)
@@ -183,22 +264,32 @@ class KIVIMethod(MethodWrapper):
 
     def get_kv_size_bytes(self, past_key_values):
         """
-        Count: quantized tensor bytes (uint8) + scale/zero bytes (fp16) + residual (fp16).
+        Count storage:
+        - Quantized blocks: uint8 data at actual bit-width + FP16 scale/zero per block
+        - Overflow buffer: FP16 (not yet quantized)
+        - Residual: FP16
         """
         total = 0
         for layer_idx, state in self.cache.items():
-            if state['quantized_k'] is not None:
-                for key in ('quantized_k', 'quantized_v'):
-                    t = state[key]
-                    total += int(t.numel() * self.bits / 8)
-                for key in ('scale_k', 'zero_k', 'scale_v', 'zero_v'):
-                    t = state[key]
-                    total += t.numel() * t.element_size()
-            for key in ('residual_k', 'residual_v'):
-                t = state[key]
-                total += t.numel() * t.element_size()
+            # Quantized blocks
+            for q, s, z in state['k_blocks']:
+                total += int(q.numel() * self.bits / 8)  # actual bit-width
+                total += s.numel() * s.element_size()
+                total += z.numel() * z.element_size()
+            for q, s, z in state['v_blocks']:
+                total += int(q.numel() * self.bits / 8)
+                total += s.numel() * s.element_size()
+                total += z.numel() * z.element_size()
 
-        # If cache is empty (fallback), count from past_key_values directly
+            # Overflow buffer (FP16, not yet quantized)
+            total += state['overflow_k'].numel() * state['overflow_k'].element_size()
+            total += state['overflow_v'].numel() * state['overflow_v'].element_size()
+
+            # Residual (FP16)
+            total += state['residual_k'].numel() * state['residual_k'].element_size()
+            total += state['residual_v'].numel() * state['residual_v'].element_size()
+
+        # Fallback if cache is empty
         if not self.cache:
             for layer in past_key_values:
                 k, v = layer[0], layer[1]
@@ -223,7 +314,7 @@ if __name__ == "__main__":
     )
     model.eval()
 
-    method = KIVIMethod(bits=4, residual_length=16)
+    method = KIVIMethod(bits=4, residual_length=16, group_size=32)
     text, metrics = generate_with_method(
         model, tokenizer, method,
         prompt="The history of machine learning began",
