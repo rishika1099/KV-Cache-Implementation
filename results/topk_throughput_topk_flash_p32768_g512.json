@@ -2,50 +2,50 @@
   "method": "topk_flash",
   "prefill_len": 32768,
   "max_new_tokens": 512,
-  "model": "meta-llama/Llama-2-7b-hf",
+  "model": "meta-llama/Llama-2-7b-chat-hf",
   "topk_params": null,
   "budget_tokens": 32768,
   "records": [
     {
-      "ttft_ms": 1776.925949999999,
-      "decode_tps": 25.673358583028246,
-      "decode_ms_per_tok": 38.95088353033268,
+      "ttft_ms": 1750.5559260000005,
+      "decode_tps": 22.26712345786523,
+      "decode_ms_per_tok": 44.90925834637964,
       "n_decode": 511,
       "peak_mem_gb": 42.082525184
     },
     {
-      "ttft_ms": 1780.5540810000052,
-      "decode_tps": 25.817463128444583,
-      "decode_ms_per_tok": 38.73347257338552,
+      "ttft_ms": 1765.2876240000026,
+      "decode_tps": 22.34280898183242,
+      "decode_ms_per_tok": 44.75712972407046,
       "n_decode": 511,
       "peak_mem_gb": 42.082525184
     },
     {
-      "ttft_ms": 1773.8521520000036,
-      "decode_tps": 26.377312894694075,
-      "decode_ms_per_tok": 37.911367393346374,
+      "ttft_ms": 1760.2986849999952,
+      "decode_tps": 22.237045729918396,
+      "decode_ms_per_tok": 44.970002407044994,
       "n_decode": 511,
       "peak_mem_gb": 42.082525184
     },
     {
-      "ttft_ms": 1775.6334219999985,
-      "decode_tps": 26.446486057457378,
-      "decode_ms_per_tok": 37.81220680234833,
+      "ttft_ms": 1757.0174570000036,
+      "decode_tps": 22.18009988216454,
+      "decode_ms_per_tok": 45.085459727984365,
       "n_decode": 511,
       "peak_mem_gb": 42.082525184
     },
     {
-      "ttft_ms": 1781.4918389999975,
-      "decode_tps": 26.76365763539337,
-      "decode_ms_per_tok": 37.364100737769064,
+      "ttft_ms": 1762.950313999994,
+      "decode_tps": 21.948285963859792,
+      "decode_ms_per_tok": 45.56164438747551,
       "n_decode": 511,
       "peak_mem_gb": 42.082525184
     }
   ],
   "summary": {
-    "mean_ttft_ms": 1777.8828735000013,
-    "mean_decode_tps": 26.351229928997352,
-    "mean_decode_ms_per_tok": 37.95528687671232,
+    "mean_ttft_ms": 1761.3885199999988,
+    "mean_decode_tps": 22.177060139443785,
+    "mean_decode_ms_per_tok": 45.09355906164383,
     "mean_peak_mem_gb": 42.082525184,
     "n_stable": 4
   }
