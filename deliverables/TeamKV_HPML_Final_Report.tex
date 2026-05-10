@@ -40,30 +40,27 @@ Eviction, and Latent Projection}
 
 % ----------------------------------------------------------------
 \begin{abstract}
-Autoregressive large language model (LLM) decoding is bounded by
-key-value (KV) cache memory bandwidth: at batch size 32 and 4K context,
-Llama-2-7B requires $\approx$65\,GB for KV alone, nearly saturating an
-H100 80\,GB GPU.  We present a single-codebase comparison of five
-KV-cache optimization techniques spanning four compression families
-(quantization via KIVI 2/4-bit, sparse dynamic selection via TopK /
-TokenSelect, one-shot eviction via SnapKV, and latent projection via
-TransMLA), plus a quantized-sparse hybrid (KIVI$\times$TopK).  All
-methods share the same model weights, tokenizer, greedy decode loop,
-prompts, seeds, and GPU (NVIDIA H100 80\,GB HBM3) so that differences
-are attributable to the KV policy only.  Our main results: KIVI 4-bit
-incurs no measurable LongBench quality drop (0.292 vs.\ 0.291) while
-delivering a 2.3$\times$ smaller KV cache and 1.93$\times$ decode
-throughput at BS\,=\,32, with maximum single-GPU throughput rising
-3.1$\times$ (1{,}517 vs.\ 497\,tok/s) once the larger batch ceiling is
-exploited.  SnapKV marginally \emph{improves} overall quality
-(+0.3\%) with zero per-step overhead.  TopK K\,=\,1024 matches
-baseline quality and gains +20\% on TriviaQA by suppressing
-distractor passages.  MLA achieves a consistent 3.9$\times$ KV
-reduction and 1.3$\times$ decode speedup at batch size 1, but the
-available checkpoint exhibits a large quality regression that requires
-retraining at longer context.  No single method is best on all three
-metrics, and the right choice depends on whether batch size, context
-length, or output fidelity is the binding constraint.
+Autoregressive large-language-model decoding is bounded by key-value
+(KV) cache memory bandwidth: at batch size 32 and 4K context,
+Llama-2-7B requires roughly 65\,GB for the cache alone, nearly
+saturating an H100 80\,GB GPU.  We benchmark five KV optimization
+techniques drawn from four compression families---per-token
+quantization (KIVI 2/4-bit), dynamic sparse selection (TopK /
+TokenSelect), one-shot eviction (SnapKV), and latent projection
+(TransMLA)---together with a quantized-sparse hybrid (KIVI$\times$TopK),
+under a single harness that fixes model, hardware, decode loop, prompts,
+and seeds across runs.  KIVI 4-bit preserves baseline LongBench quality
+and roughly doubles decode throughput at batch 32 by lifting the
+operational batch ceiling from 32 to 128.  SnapKV slightly improves
+overall quality with no per-step decode cost; TopK $K\!=\!1024$ matches
+baseline quality and gains substantially on retrieval-heavy tasks.  MLA
+yields a consistent $3.9\times$ KV reduction even at batch 1, but the
+available checkpoint regresses on quality and requires retraining.  The
+hybrid stacks memory savings of both compression axes at the cost of
+decode speed at long context.  Each method occupies a distinct point in
+the quality--memory--latency space; the right choice depends on whether
+batch size, context length, or output fidelity is the binding
+constraint.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -75,80 +72,73 @@ multi-head latent attention, throughput, memory efficiency
 \section{Introduction}
 % ================================================================
 
-Large language model inference operates in two phases: prefill, which
-processes the entire input prompt in a single forward pass, and decode,
-which generates one token per step.  During decode, all past key and
-value tensors must be read from GPU HBM at every step, making decode
-strongly memory-bandwidth bound.  For Llama-2-7B \cite{llama2} with 32
-transformer layers, 32 attention heads of dimension 128, FP16 precision,
-4096-token context, and batch size 32, the KV cache alone occupies
-$2 \times 32 \times 32 \times 128 \times 4096 \times 32 \times 2 \approx 65$\,GB
----nearly the full capacity of an H100 80\,GB GPU \cite{survey}.
+LLM inference proceeds in two phases.  Prefill processes the prompt in
+a single forward pass; decode then emits one token per step.  Each
+decode step rereads every cached key and value tensor from HBM, making
+decode strongly memory-bandwidth bound rather than compute-bound.  The
+cost grows linearly with sequence length, batch size, and depth.  For
+Llama-2-7B \cite{llama2} (32 layers, 32 heads of dimension 128, FP16) at
+4096 tokens and batch size 32, the cache occupies
+$2\times32\times32\times128\times4096\times32\times2 \approx 65$\,GB
+\cite{survey}---leaving little room for activations on an 80\,GB GPU
+and pushing larger configurations into out-of-memory territory.
 
-Research on KV cache reduction has produced four principal compression
-families:
-(1)~\emph{Quantization}---reduce bits per element while keeping all
-tokens \cite{kivi,kvquant};
-(2)~\emph{Sparse selection}---attend to a dynamically chosen subset of
-tokens per step \cite{tokenselect,rocketkv};
-(3)~\emph{Eviction}---permanently discard low-importance tokens after
-prefill \cite{h2o,snapkv,adakv};
-(4)~\emph{Latent projection}---store a compressed low-rank
-representation instead of full K/V tensors \cite{deepseekv2,transmla}.
+Research on KV reduction has converged on four principal compression
+families.  \emph{Quantization} reduces bits per element while keeping
+all tokens \cite{kivi,kvquant}.  \emph{Sparse selection} attends to a
+dynamically chosen subset of tokens at each decode step
+\cite{tokenselect,rocketkv}.  \emph{Eviction} permanently discards
+low-importance tokens after prefill \cite{h2o,snapkv,adakv}.
+\emph{Latent projection} stores a compressed low-rank representation
+instead of full K/V tensors \cite{deepseekv2,transmla}.  Cross-family
+comparison is difficult in practice because published evaluations
+rarely share the same model, hardware, or decode loop.  This work
+addresses that gap with a unified harness whose only variable is the KV
+policy.
 
-Published evaluations rarely share identical experimental conditions,
-making cross-family comparisons unreliable.  This work addresses that gap
-with a unified benchmark harness that holds model, hardware, decode loop,
-prompts, and seeds constant across all methods.
-
-Our main contributions are:
-(i) a single-codebase benchmark of five KV optimization techniques
-including a quantized-sparse hybrid;
-(ii) kernel-level analysis explaining crossover behavior (KIVI and TopK
-are \emph{slower} than baseline at low batch sizes but faster at high
-batch sizes or long context);
-(iii) empirical evidence that KIVI 4-bit and SnapKV 0.4 provide
-lossless or better LongBench quality;
-(iv) full reproducibility via Modal cloud scripts and a public W\&B
-dashboard at
+Our contributions are: (i) a single-codebase benchmark of five KV
+optimization techniques and a quantized-sparse hybrid on Llama-2-7B;
+(ii) a kernel-level analysis of crossover behavior---KIVI and TopK are
+slower than baseline at low batch but faster at high batch or long
+context; (iii) empirical evidence that KIVI 4-bit and SnapKV 0.4
+deliver lossless or marginally better LongBench quality; and (iv) full
+reproducibility via Modal cloud scripts and a public W\&B dashboard at
 \url{https://wandb.ai/rm4318-columbia-university/kv-cache-hpml}.
 
 % ================================================================
 \section{Literature Review}
 % ================================================================
 
-\textbf{KV Quantization.}
-KIVI \cite{kivi} stores keys with per-channel scales (capturing the
-dominant channel-direction outliers) and values with per-token grouped
-quantization (group size 32), retaining the last 128 tokens in FP16 to
-preserve short-range attention fidelity.  At 2-bit it achieves roughly
-$8\times$ cache compression; at 4-bit, $4\times$.  KVQuant
-\cite{kvquant} extends this with per-channel smoothing and non-uniform
-codebooks, reaching near-lossless 1-bit compression at the cost of
-greater overhead.
+\textbf{Quantization.}
+KIVI \cite{kivi} stores keys with per-channel scales (capturing
+channel-direction outliers) and values with per-token grouped
+quantization (group size 32), keeping the last 128 tokens in FP16 for
+short-range fidelity.  At 2-bit it achieves roughly $8\times$ cache
+compression, at 4-bit roughly $4\times$.  KVQuant \cite{kvquant}
+extends this with non-uniform codebooks and per-channel smoothing,
+reaching near-lossless 1-bit at greater overhead.
 
-\textbf{Sparse Token Selection.}
-TokenSelect \cite{tokenselect} (the basis of our TopK implementation)
-maintains the full FP16 cache but at each decode step selects only the
-top-$K$ tokens for attention, fusing the scoring kernel in Triton.  A
-cosine-similarity reuse cache avoids re-scoring when consecutive queries
-are similar.  RocketKV \cite{rocketkv} adds a two-stage compression
-pipeline; RefreshKV \cite{refreshkv} periodically refreshes evicted
-tokens.
+\textbf{Sparse selection.}
+TokenSelect \cite{tokenselect}---the basis of our TopK
+implementation---retains the full FP16 cache but at each decode step
+selects only the top-$K$ tokens for attention, fusing the scoring
+kernel in Triton.  A cosine-similarity reuse cache avoids re-scoring
+when consecutive queries are similar.  RocketKV \cite{rocketkv} adds a
+two-stage compression pipeline; RefreshKV \cite{refreshkv} periodically
+refreshes evicted tokens.
 
-\textbf{Eviction-Based Methods.}
-H2O \cite{h2o} identifies ``heavy hitter'' tokens by cumulative
-attention mass and evicts the rest.  SnapKV \cite{snapkv} performs a
-single eviction after prefill by voting over a small observation window
-of recent queries, producing a fixed-size compressed cache with no
-per-step overhead.  Ada-KV \cite{adakv} allocates the budget
-adaptively per head.
+\textbf{Eviction.}
+H2O \cite{h2o} identifies ``heavy-hitter'' tokens by cumulative
+attention mass.  SnapKV \cite{snapkv} performs a single eviction after
+prefill by voting over a small observation window, producing a
+fixed-size compressed cache with no per-step overhead.  Ada-KV
+\cite{adakv} allocates the budget adaptively per head.
 
-\textbf{Latent KV / Architectural Compression.}
-DeepSeek-V2 \cite{deepseekv2} introduced Multi-head Latent Attention
+\textbf{Latent KV.}
+DeepSeek-V2 \cite{deepseekv2} introduced multi-head latent attention
 (MLA), which stores a compressed latent vector $c_t$ per token and
-expands to full K/V during attention via a learned up-projection, using
-Attention Absorption to amortize the projection cost.  TransMLA
+expands to full K/V during attention via a learned up-projection, with
+Attention Absorption amortizing the projection cost.  TransMLA
 \cite{transmla} retrofits this structure onto an existing Llama-2
 checkpoint.
 
@@ -158,94 +148,95 @@ checkpoint.
 
 \subsection{Model and Hardware}
 
-All experiments use \texttt{meta-llama/Llama-2-7b-chat-hf}
-(32 layers, 32 heads, head dim 128, FP16 weights) on a single NVIDIA
-H100 80\,GB HBM3 GPU provided by Modal cloud compute.  Software stack:
+All experiments use \texttt{meta-llama/Llama-2-7b-chat-hf} (32 layers,
+32 heads, head dim 128, FP16 weights) on a single NVIDIA H100 80\,GB
+HBM3 GPU provided by Modal cloud compute.  The runtime stack is pinned:
 PyTorch 2.4.1, HuggingFace Transformers 4.44.2, CUDA 12.1, Triton 3.0,
-flash-attn 2.5.  The MLA method additionally uses
-\texttt{botsxc/llama2-7b-chat-mla-2048-8} \cite{transmla} (freqfold-8,
-2048-dim latent, calibrated at 256-token context, no finetuning).
+flash-attn 2.5.  The MLA experiments additionally use
+\texttt{botsxc/llama2-7b-chat-mla-2048-8} \cite{transmla} (2048-dim
+latent, 256-token calibration context, no further finetuning).
 
-\subsection{Evaluation Datasets and Metrics}
+\subsection{Datasets and Metrics}
 
-\textbf{LongBench quality} \cite{longbench}: 6 long-context tasks
-$\times$ 20 examples = 120 examples per method.  Tasks: \texttt{qasper}
-(scientific QA, F1), \texttt{multifieldqa\_en} (multi-document QA, F1),
-\texttt{triviaqa} (open-domain QA, F1), \texttt{2wikimqa} (multi-hop QA,
-F1), \texttt{multi\_news} (summarization, ROUGE-L), \texttt{lcc} (code
-completion, edit similarity).  Input truncated to 4096 tokens using
-middle truncation (KIVI paper convention).
+\textbf{Quality.}  LongBench \cite{longbench}, six tasks $\times$ 20
+examples = 120 examples per method: \texttt{qasper} (scientific QA, F1),
+\texttt{multifieldqa\_en} (multi-document QA, F1), \texttt{triviaqa}
+(open-domain QA, F1), \texttt{2wikimqa} (multi-hop QA, F1),
+\texttt{multi\_news} (summarization, ROUGE-L), \texttt{lcc} (code
+completion, edit similarity).  Inputs are middle-truncated to 4096
+tokens following the KIVI paper convention.
 
-\textbf{Throughput benchmarks}: synthetic fixed-size batches; prefill
-length 1024 tokens, generation 512 tokens, batch sizes 1--256.  Five
-batches per config; first excluded as warmup; mean of four reported.
+\textbf{Throughput.}  Synthetic fixed-size batches with prefill 1024
+and generation 512 tokens, swept over batch sizes 1--256.  Five batches
+per configuration; the first is dropped as warmup; the mean of the
+remaining four is reported.
 
-\textbf{Long-context benchmarks}: prefill length 32{,}768 tokens,
-generation 512 tokens, batch size 1, using TopK-Flash and the
-KIVI$\times$TopK hybrid.
+\textbf{Long context.}  Prefill 32{,}768 tokens, generation 512, batch
+size 1, used for TopK-Flash and the KIVI$\times$TopK hybrid.
 
 \subsection{Profiling Tools}
 
-\textbf{Memory:} \texttt{torch.cuda.max\_memory\_allocated()} reset
-before each batch; measures peak, not steady-state.
-\textbf{Timing:} \texttt{torch.cuda.synchronize()} + \texttt{time.perf\_counter()} for TTFT (time to first token, i.e., prefill) and decode throughput (tokens per second, steps 2--$G$).
-\textbf{Experiment tracking:} Weights \& Biases; all runs at
-\url{https://wandb.ai/rm4318-columbia-university/kv-cache-hpml}.
-\textbf{Kernel profiling:} \texttt{torch.profiler} with Chrome trace
-export for operator-level analysis.
+Memory: \texttt{torch.cuda.max\_memory\_allocated()} reset before each
+batch; this measures peak, not steady-state.  Timing:
+\texttt{torch.cuda.synchronize()} + \texttt{time.perf\_counter()}
+brackets prefill (TTFT, time to first token) and the decode loop
+(throughput in tokens per second over steps $2$ to $G$).
+Operator-level traces are captured with \texttt{torch.profiler} and
+exported to Chrome trace.  All runs are logged to Weights \& Biases.
 
 \subsection{Method Implementations}
 
 All methods implement a shared \texttt{MethodWrapper} interface in
-\texttt{methods/} and are invoked through an identical generate loop in
+\texttt{methods/} and run through an identical generate loop in
 \texttt{benchmark/runner.py}.
 
-\textbf{Baseline (FP16):} Standard dense attention with no KV
-modification; serves as the reference.
+\textbf{Baseline (FP16):} dense attention with no KV modification.
 
-\textbf{KIVI \cite{kivi}:}  Keys quantized per-channel to 2 or 4 bits
-(grouping across the sequence dimension per head); values quantized
-per-token with group size 32.  The last \texttt{residual\_length}=128
-tokens are retained in FP16.  Quantization uses a custom Triton kernel
-(\texttt{triton\_quantize\_and\_pack}) that fuses INT4 packing; GEMV
-dequantizes on-the-fly via \texttt{cuda\_bmm\_fA\_qB\_outer}.  The KV
-cache is stored as a 9-tuple (quantized blocks + scales + zeros per K
-and V + FP16 residual buffer) per layer.
+\textbf{KIVI \cite{kivi}.}  Keys are quantized per-channel to 2 or 4
+bits (grouped across the sequence dimension per head); values are
+quantized per-token with group size 32.  The last 128 tokens are kept
+in FP16 (the residual buffer).  Quantization fuses INT4 packing in a
+Triton kernel (\texttt{triton\_quantize\_and\_pack}); GEMV dequantizes
+on-the-fly via \texttt{cuda\_bmm\_fA\_qB\_outer}.  The cache is stored
+as a 9-tuple per layer (quantized blocks + scales + zeros for K and V
+plus the FP16 residual).
 
-\textbf{TopK / TokenSelect \cite{tokenselect}:} The full FP16 cache is
-retained.  Three-region attention budget: sink window (first 128
-tokens), dynamically-selected top-$K$ middle tokens, and local window
-(last 512 tokens).  Per-decode-step scoring fuses $\mathbf{Q}\mathbf{K}^\top$
-across all 32 heads via Triton kernel \texttt{\_topk\_score\_kernel}
-$\rightarrow$ softmax $\rightarrow$ per-head sum $\rightarrow$
-\texttt{torch.topk}.  A cosine similarity cache (threshold 0.9) skips
-re-scoring when consecutive queries are similar.  RoPE correction passes
-\texttt{true\_seq\_length} to each decode step.
+\textbf{TopK / TokenSelect \cite{tokenselect}.}  The full FP16 cache is
+retained.  Three-region attention budget: a sink window (first 128
+tokens), dynamically-selected top-$K$ middle tokens, and a local window
+(last 512 tokens).  Per-decode-step scoring fuses
+$\mathbf{Q}\mathbf{K}^\top$ across all 32 heads in a Triton kernel
+(\texttt{\_topk\_score\_kernel}) followed by softmax, per-head sum, and
+\texttt{torch.topk}.  A cosine-similarity cache (threshold 0.9) skips
+re-scoring when consecutive queries are similar; RoPE correction passes
+\texttt{true\_seq\_length} to each step.
 
-\textbf{TopK-Flash:} Variant of TopK using a paged KV pool (256-token
-pages) + \texttt{flash\_attn\_with\_kvcache} for zero-copy selective
-attention.  Avoids the 52\,GB contiguous allocation required by standard
-flash-attn at 32K context.
+\textbf{TopK-Flash.}  The selection logic above on a paged KV pool
+(256-token pages) plus \texttt{flash\_attn\_with\_kvcache} for
+zero-copy selective attention.  This avoids the 52\,GB contiguous
+allocation that standard flash-attn requires at 32K context.
 
-\textbf{SnapKV \cite{snapkv}:} After prefill, averages attention scores
-over the last 32 query positions per head (the observation window),
-applies max-pool (kernel size 7) to smooth noise, then retains
-$\lfloor S \times 0.4 \rfloor$ top-voted tokens per head permanently.
-Decode runs over the fixed reduced cache with zero per-step overhead.
-Budget ratio 0.4; observation window 32.
+\textbf{SnapKV \cite{snapkv}.}  After prefill, attention scores from
+the last 32 query positions per head (the observation window) are
+averaged, max-pooled with kernel size 7 to smooth noise, and the top
+$\lfloor S \times 0.4 \rfloor$ tokens per head are retained
+permanently.  Decode runs over the fixed reduced cache with no per-step
+overhead.
 
-\textbf{MLA (TransMLA \cite{transmla}):} Stores a compressed latent
-vector $c_t \in \mathbb{R}^{d_c}$ per token (here $d_c = 2048$,
-$4\times$ compression vs.\ $d_k \cdot n_h = 4096$).  At decode time,
-$c_t$ is up-projected to full K/V by learned matrices; Attention
-Absorption folds the up-projection into QKV attention.
+\textbf{MLA (TransMLA \cite{transmla}).}  Each token stores a
+compressed latent $c_t \in \mathbb{R}^{2048}$ ($4\times$ compression vs.\
+$d_k\!\cdot\!n_h = 4096$).  At decode time, $c_t$ is up-projected to
+full K/V by learned matrices; Attention Absorption folds the
+up-projection into the QKV computation.
 
-\textbf{KIVI$\times$TopK Hybrid:} Combines KIVI (INT4 packed storage)
-with sparse attention: prefill uses \texttt{F.scaled\_dot\_product\_attention}
-(flash-attn backed, $O(T)$ memory) to avoid 32K OOM; decode scores all
-tokens via \texttt{cuda\_bmm\_fA\_qB\_outer} over INT4-packed K, selects
-$n_\text{sink}+K+n_\text{local}$ positions, then gathers packed INT4 V
-rows directly for the attention GEMV without an intermediate FP16 write.
+\textbf{KIVI$\times$TopK Hybrid.}  Prefill uses
+\texttt{F.scaled\_dot\_product\_attention} (flash-attn backed,
+$O(T)$ memory) to avoid 32K OOM.  Decode scores all tokens via
+\texttt{cuda\_bmm\_fA\_qB\_outer} over INT4-packed K, selects
+$n_\text{sink}+K+n_\text{local}$ positions, and gathers the
+corresponding INT4 V rows into a contiguous buffer fed directly into
+\texttt{cuda\_bmm\_fA\_qB\_outer}---no intermediate FP16 V is
+materialized.
 
 % ================================================================
 \section{Experimental Results}
@@ -253,11 +244,10 @@ rows directly for the attention GEMV without an intermediate FP16 write.
 
 \subsection{LongBench Quality}
 
-Table~\ref{tab:quality} reports per-task and overall LongBench scores
-for all methods.  KIVI 4-bit and TopK K=1024 both achieve 0.292
-(+0.3\% and +0.4\% over baseline 0.291) --- within evaluation noise for
-20 examples per task but consistent across runs.  SnapKV 0.4 reaches
-0.295 (+0.3\%).
+Table~\ref{tab:quality} reports per-task and overall LongBench scores.
+KIVI 4-bit and TopK $K\!=\!1024$ both achieve 0.292 (+0.3\% and +0.4\%
+over baseline 0.291)---within evaluation noise for 20 examples per
+task but consistent across runs.  SnapKV 0.4 reaches 0.295 (+0.3\%).
 
 \begin{table}[!t]
 \centering
@@ -273,9 +263,9 @@ Tasks: (1) qasper, (2) mfqa, (3) triviaqa, (4) 2wikimqa,
 Baseline (FP16)       & .172 & .380 & .644 & .083 & .181 & .287 & .291 \\
 KIVI 4-bit            & .194 & .360 & .643 & .083 & .188 & .286 & \textbf{.292} \\
 KIVI 2-bit            & .133 & .382 & .608 & .050 & .191 & .277 & .273 \\
-TopK K=2048           & .145 & .329 & .731 & .075 & .178 & .282 & .290 \\
-TopK K=1024           & .153 & .281 & .773 & .089 & .183 & .273 & \textbf{.292} \\
-TopK K=512            & .145 & .237 & .751 & .050 & .178 & .281 & .274 \\
+TopK $K$=2048         & .145 & .329 & .731 & .075 & .178 & .282 & .290 \\
+TopK $K$=1024         & .153 & .281 & .773 & .089 & .183 & .273 & \textbf{.292} \\
+TopK $K$=512          & .145 & .237 & .751 & .050 & .178 & .281 & .274 \\
 SnapKV 0.4            & .153 & .387 & .687 & .083 & .181 & .277 & \textbf{.295} \\
 MLA (B=1)*            & .036 & .101 & .064 & .043 & .103 & .140 & .081 \\
 \bottomrule
@@ -284,28 +274,30 @@ MLA (B=1)*            & .036 & .101 & .064 & .043 & .103 & .140 & .081 \\
 \footnotesize{* MLA baseline truncated to 2048 tokens vs.\ 4096 for others.}
 \end{table}
 
-Per-task patterns show two opposite breakdown mechanisms:
-\emph{KIVI 2-bit and TopK K=512 both converge to overall score
-$\approx$0.274 via different paths.}  KIVI's quantization noise
-most hurts qasper (−22\%) and 2wikimqa (−40\%), tasks requiring precise
-recall of sparse mid-context facts.  TopK's sparse selection most hurts
-multifieldqa\_en (−38\% at K=512) because answer spans at depth $> n_\text{sink} + n_\text{local}$ are pruned.  Conversely, \emph{TopK
-beats baseline on TriviaQA across all K} (+13\% to +20\%): the answer
-appears in multiple phrasings; sparse selection drops distracting copies
-and focuses attention.  SnapKV's one-shot vote actively aligns selection
-with answer-bearing positions, boosting triviaqa (+4\%) and
-multifieldqa (+0.7\%) while only hurting qasper (−2\%) where
-evidence spans fall outside the 32-token observation window.
+Per-task patterns reveal two opposite breakdown mechanisms when
+compression is too aggressive.  KIVI 2-bit and TopK $K\!=\!512$ both
+end up near 0.274 overall, but for different reasons.  KIVI's
+quantization noise hurts qasper ($-22\%$) and 2wikimqa ($-40\%$), tasks
+that require precise recall of sparse mid-context facts.  TopK
+$K\!=\!512$ hurts \texttt{multifieldqa\_en} ($-38\%$) because answer
+spans deeper than $n_\text{sink} + n_\text{local}$ are pruned.
+Conversely, TopK beats baseline on TriviaQA across all $K$
+($+13$\,pt to $+20$\,pt): the answer appears in multiple paraphrases,
+so sparse selection drops distracting copies and concentrates
+attention.  SnapKV's one-shot vote actively aligns selection with
+answer-bearing positions, boosting triviaqa ($+4$\,pt) and multifieldqa
+($+0.7$\,pt) while only hurting qasper ($-2$\,pt) where evidence spans
+fall outside the 32-token observation window.
 
 \subsection{Throughput and Memory}
 
 Table~\ref{tab:throughput} shows the KIVI throughput sweep at prefill
-1024, gen 512.
+1024, generation 512.
 
 \begin{table}[!t]
 \centering
 \caption{Decode throughput (tok/s) and peak GPU memory vs.\ batch size.
-Prefill 1024, gen 512. ``—'' = OOM.}
+Prefill 1024, gen 512.  ``--'' = OOM.}
 \label{tab:throughput}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}rrrrrrr@{}}
@@ -315,80 +307,87 @@ Prefill 1024, gen 512. ``—'' = OOM.}
 \textbf{BS} & \textbf{Base} & \textbf{KIVI-2b} & \textbf{Spdup} & \textbf{Base} & \textbf{KIVI-2b} & \textbf{MLA} \\
 \midrule
 1   &  70 &   30 & 0.43$\times$ & 15.1 & 14.0 & 13.8 \\
-2   & 135 &   61 & 0.45$\times$ & 16.7 & 14.4 &  —   \\
-4   & 242 &  123 & 0.51$\times$ & 20.0 & 15.3 &  —   \\
-8   & 351 &  243 & 0.69$\times$ & 26.4 & 17.1 &  —   \\
-16  & 438 &  480 & 1.10$\times$ & 39.3 & 20.7 &  —   \\
-32  & 497 &  957 & 1.93$\times$ & 65.0 & 27.8 &  —   \\
-64  &  —  & 1295 & $\infty$     &  —   & 42.1 &  —   \\
-128 &  —  & 1517 & $\infty$     &  —   & 70.7 &  —   \\
+2   & 135 &   61 & 0.45$\times$ & 16.7 & 14.4 &  --   \\
+4   & 242 &  123 & 0.51$\times$ & 20.0 & 15.3 &  --   \\
+8   & 351 &  243 & 0.69$\times$ & 26.4 & 17.1 &  --   \\
+16  & 438 &  480 & 1.10$\times$ & 39.3 & 20.7 &  --   \\
+32  & 497 &  957 & 1.93$\times$ & 65.0 & 27.8 &  --   \\
+64  &  -- & 1295 & $\infty$     &  --  & 42.1 &  --   \\
+128 &  -- & 1517 & $\infty$     &  --  & 70.7 &  --   \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \textbf{Crossover at BS=16.}  KIVI 2-bit decode throughput is
 $0.4$--$0.7\times$ baseline at BS 1--8 but crosses over at BS=16
-(480 vs.\ 438\,tok/s, 1.10$\times$) and reaches 1.93$\times$ at
-BS=32.  The crossover arises because at small batch the decode
-$\mathbf{Q}\mathbf{K}^\top$ is a GEMV: INT4 GEMV does not map to
-tensor core units and is $\approx$2.5$\times$ slower than FP16 GEMV.
-At large batch the operation becomes a near-GEMM where HBM bandwidth
-saving (the KV cache is $2.3\times$ smaller at BS=32: 27.8 vs.\ 65\,GB)
-outweighs dequantization cost.
+(480 vs.\ 438\,tok/s, $1.10\times$) and reaches $1.93\times$ at BS=32.
+The mechanism is straightforward: at small batch the decode
+$\mathbf{Q}\mathbf{K}^\top$ is a GEMV, and INT4 GEMV does not map to
+H100 tensor-core units---it is roughly $2.5\times$ slower than FP16
+GEMV.  At large batch the same operation becomes a near-GEMM where the
+HBM bandwidth saving (the cache is $2.3\times$ smaller at BS=32:
+27.8 vs.\ 65.0\,GB) outweighs dequantization cost.
 
 \textbf{Capacity extension.}  Baseline OOMs at BS=64; KIVI 2-bit
-reaches BS=128 at 70.7\,GB and achieves 1{,}517\,tok/s—$3.1\times$
-the maximum ever achievable with the baseline on this GPU.
+reaches BS=128 at 70.7\,GB and achieves 1{,}517\,tok/s---about
+$3\times$ the maximum ever achievable with the baseline on this GPU.
+This is the strongest practical argument for KIVI: it raises the
+per-GPU concurrency ceiling, not just speed at fixed batch.
 
-\textbf{TTFT overhead.}  KIVI TTFT is 18--66\% worse across batch sizes
-(e.g., 998 vs.\ 1659\,ms at BS=32) because the full KV cache is
+\textbf{TTFT overhead.}  KIVI's TTFT is 18--66\% worse across batch
+sizes (998 vs.\ 1659\,ms at BS=32) because the full KV cache is
 quantized and packed at the end of prefill---a cost proportional to
-$B \times S$.  For latency-sensitive workloads (interactive chat), this
-is a real penalty; for throughput-oriented offline inference, KIVI
-is the preferred choice.
+$B \times S$.  For latency-sensitive interactive workloads this is a
+real penalty; for throughput-oriented offline inference it is amortized
+over hundreds of decode steps.
 
-\textbf{MLA at B=1.}  MLA achieves 43--44\,tok/s vs.\ 34\,tok/s
-baseline (1.26--1.32$\times$) despite batch size 1.  This confirms
-that even single-request decode is partially HBM-bandwidth bound; the
-3.9$\times$ KV reduction reduces per-step HBM traffic proportionally.
-TTFT is also lower with MLA at shorter prefill lengths (39 vs.\ 52\,ms
-at $p$=512) due to the smaller working set.
+\textbf{MLA at B=1.}  At gen=256, MLA achieves 43--44\,tok/s vs.\
+34\,tok/s baseline ($1.26$--$1.32\times$) across prefill lengths
+512--2048.  Even single-request decode is partially HBM-bandwidth
+bound: the $3.9\times$ KV reduction (e.g., 1207 \(\rightarrow\) 311\,MB
+at $p\!=\!2048$) reduces per-step HBM traffic proportionally.  The
+speedup narrows at gen=512 because the MLA up-projection cost grows
+with output length.
 
 \subsection{Long-Context Results (32K)}
 
 \begin{table}[!t]
 \centering
-\caption{Long-context results. Prefill 32{,}768 tokens, gen 512, BS=1.}
+\caption{Long-context results.  Prefill 32{,}768 tokens, gen 512, BS=1.}
 \label{tab:longctx}
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 \textbf{Method} & \textbf{TTFT (ms)} & \textbf{Spdup} & \textbf{Peak mem} & \textbf{Saving} \\
 \midrule
-Baseline (FP16)     & 2627 & 1.00$\times$ & 52.1\,GB & — \\
-TopK-Flash          & 1761 & 1.49$\times$ & 42.1\,GB & −19\% \\
-SnapKV 0.4          &  —   & —            & 26.0\,GB$^{\dagger}$ & −50\% \\
-KIVI$\times$TopK 4b &  —   & 0.60$\times$ & 25.8\,GB & −51\% \\
+Baseline (FP16)     & 2627 & 1.00$\times$ & 52.1\,GB & --- \\
+TopK-Flash          & 1761 & 1.49$\times$ & 42.1\,GB & $-19\%$ \\
+SnapKV 0.4          &  --- & ---          & 26.0\,GB$^{\dagger}$ & $-50\%$ \\
+KIVI$\times$TopK 4b &  --- & 0.61$\times$ & 25.8\,GB & $-50\%$ \\
 \bottomrule
 \end{tabular}
 \vspace{1pt}
-\footnotesize{Baseline OOMs at 64K; TopK-Flash succeeds at 65.8\,GB.  $^{\dagger}$SnapKV peak memory at 32K is interpolated from short-context measurements; 32K SnapKV throughput not directly benchmarked.}
+\footnotesize{Baseline OOMs at 64K; TopK-Flash succeeds at 65.8\,GB.
+$^{\dagger}$SnapKV peak memory at 32K is interpolated from
+short-context measurements; 32K SnapKV throughput not directly
+benchmarked.}
 \end{table}
 
 \textbf{TopK-Flash.}  At 32K context the 256-token paged KV pool
-eliminates the 52\,GB contiguous memory allocation that standard
-flash-attn requires, reducing TTFT by 33\% and peak memory by 19\%.
-The gain is not from sparsity per se but from allocation and
-memory-access-pattern improvement.  Baseline OOMs at 64K; TopK-Flash
-handles it at 65.8\,GB.
+eliminates the 52\,GB contiguous allocation that standard flash-attn
+requires, reducing TTFT by 33\% and peak memory by 19\%.  The win is
+not from sparsity but from allocation and memory-access-pattern
+improvement.  Baseline OOMs at 64K; TopK-Flash succeeds at 65.8\,GB.
 
-\textbf{KIVI$\times$TopK hybrid.}  At 32K, combining INT4 storage with
-sparse attention cuts peak memory 51\% (52.1$\rightarrow$25.8\,GB) but
-decode speed drops 40\% (21.4$\rightarrow$12.9\,tok/s).  The slowdown
-arises because $\mathbf{Q}\mathbf{K}^\top$ must still score all 32K
+\textbf{KIVI$\times$TopK hybrid.}  Combining INT4 storage with sparse
+attention cuts peak memory 50\% (52.1$\rightarrow$25.8\,GB) but decode
+throughput drops 39\% (21.0$\rightarrow$12.9\,tok/s).  The slowdown has
+two sources: (a) $\mathbf{Q}\mathbf{K}^\top$ must still score all 32K
 tokens every step before top-$K$ can be applied---the scoring cost is
-identical to the baseline, plus additional topk + sort + gather
-overhead.  LongBench quality remains at $\approx$0.297 (within noise of
-0.291 baseline).
+identical to baseline, plus topk + sort + gather; (b) the INT4 V GEMV
+inherits the same low-batch dequantization penalty as KIVI.  LongBench
+quality remains at 0.297, within noise of 0.291.  The hybrid shows
+that orthogonal compression strategies stack memory savings, but a
+selection-cost reduction is needed before the latency win materializes.
 
 % ================================================================
 \section{Discussion}
@@ -403,120 +402,128 @@ Table~\ref{tab:tradeoff} summarizes the operating point of each method.
 \caption{Deployment fit summary.}
 \label{tab:tradeoff}
 \setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}lllll@{}}
+\begin{tabular}{@{}llll@{}}
 \toprule
 \textbf{Method} & \textbf{KV ratio} & \textbf{Quality} & \textbf{Best regime} \\
 \midrule
-KIVI 4-bit  & 4$\times$  & Lossless (.292)          & Batch serving $\geq$ BS=16 \\
-KIVI 2-bit  & 8$\times$  & −6.2\% (.273)            & Max-batch, accept noise \\
-TopK K=1024 & 1$\times$† & Lossless (.292)          & Single-req, long context \\
-SnapKV 0.4  & 2.5$\times$& +0.3\% (.295)            & Any; quality-neutral \\
-MLA (B=1)   & 3.9$\times$& −65\%* needs retrain     & After finetuning at $\geq$4K \\
+KIVI 4-bit  & $4\times$  & Lossless (.292)        & Batch serving $\geq$ BS=16 \\
+KIVI 2-bit  & $8\times$  & $-6.2\%$ (.273)        & Max-batch, accept noise \\
+TopK $K$=1024 & $1\times$$^{\dagger}$ & Lossless (.292) & Single-req, long context \\
+SnapKV 0.4  & $2.5\times$ & $+0.3\%$ (.295)       & Any; quality-neutral \\
+MLA (B=1)   & $3.9\times$ & $-65\%$* needs retrain & After finetuning at $\geq$4K \\
 \bottomrule
 \end{tabular}
 \vspace{1pt}
-\footnotesize{† TopK does not reduce KV storage; * truncation mismatch may inflate gap.}
+\footnotesize{$^{\dagger}$TopK keeps full FP16 cache; only attention scope is sparse.  *Truncation mismatch may inflate gap.}
 \end{table}
 
-\textbf{KIVI 4-bit} is the headline recommendation for high-throughput
-batch inference: it costs nothing in quality, extends the maximum
-serviceable batch size from 32 to 128, and multiplies peak throughput
-3.1$\times$ on a single H100.  The only cost is TTFT latency
-(+18--66\%), which matters for interactive applications.
+\textbf{KIVI 4-bit} is the best practical default for high-throughput
+batch inference: it costs nothing in quality, raises max batch from 32
+to 128, and roughly triples peak single-GPU throughput.  The cost is
+TTFT latency ($+18$--$66\%$), which matters for interactive
+applications.
 
-\textbf{SnapKV 0.4} is the best choice when quality must be preserved
-and per-step overhead must be zero.  Its 2.5$\times$ KV reduction adds
-no per-step decode cost because the compressed cache is built once
-after prefill.
+\textbf{SnapKV 0.4} is the right choice when quality must be preserved
+and per-step overhead must be zero.  Its $2.5\times$ KV reduction has
+no decode-time cost because the compressed cache is built once after
+prefill.
 
-\textbf{TopK K=1024} is suited to single-request, long-context
-scenarios ($>$32K) where the paged variant (TopK-Flash) provides real
-TTFT and memory gains.  At short context and low batch, scoring overhead
-dominates.
+\textbf{TopK $K\!=\!1024$} is suited to single-request, long-context
+use ($>32$K) where the paged variant (TopK-Flash) provides real TTFT
+and memory gains.  At short context and low batch, scoring overhead
+dominates the saved attention work.
 
-\textbf{MLA} shows the theoretical ceiling of latent projection: 3.9$\times$
-KV reduction and 1.3$\times$ decode speedup are repeatable benefits
-even at B=1, but realizing this on a production-quality checkpoint
-requires finetuning with a longer context window and higher latent rank.
+\textbf{MLA} shows the theoretical ceiling of latent projection:
+$3.9\times$ KV reduction and $1.3\times$ decode speedup are repeatable
+benefits even at B=1, but production-quality output requires a
+checkpoint trained at longer context with higher latent rank.
 
 \subsection{Kernel-Level Observations}
 
 \textbf{INT4 GEMV inefficiency.}  \texttt{cuda\_bmm\_fA\_qB\_outer}
-performs per-GEMV INT4$\rightarrow$FP16 dequantization.  H100 tensor
-cores target INT8/FP16 GEMM; INT4 GEMV falls back to scalar or
-vector-INT4 paths and runs $\approx$2.5$\times$ slower than native FP16
-GEMV at BS=1.  The bandwidth saving only exceeds this overhead when
-decode approaches the GEMM regime at BS$\geq$16.
+performs on-the-fly INT4 $\rightarrow$ FP16 dequantization per GEMV.
+H100 tensor cores target INT8/FP16 GEMM; INT4 GEMV falls back to scalar
+or vector-INT4 paths.  Bandwidth saving only exceeds this overhead when
+decode approaches GEMM at BS$\geq$16.
 
 \textbf{KIVI residual buffer hot path.}  At short generation lengths
-($< \texttt{residual\_length} \times n_\text{layers}$), nearly all
+($<\!\texttt{residual\_length}\!\times\!n_\text{layers}$), nearly all
 attention concentrates in the FP16 residual; KIVI provides minimal
-storage benefit.  This is also why KIVI TTFT is $3\times$ slower:
-full-prefill quantization is paid unconditionally.
+storage benefit in this regime.  This is also why KIVI TTFT is roughly
+$3\times$ slower: the full prefill quantization is paid upfront.
 
 \textbf{Triton fused scoring.}  \texttt{\_topk\_score\_kernel} fuses
-$\mathbf{Q}\mathbf{K}^\top$ + softmax + head-sum into a single kernel
-launch, reducing Python-dispatch overhead 2--3$\times$ vs.\ sequential
+$\mathbf{Q}\mathbf{K}^\top$ + softmax + head-sum into a single launch,
+reducing Python-dispatch overhead $2$--$3\times$ vs.\ sequential
 PyTorch ops.  At 1K--4K sequence lengths the critical path remains HBM
-bandwidth, not compute.
+bandwidth, not compute or launch latency.
+
+\textbf{Hybrid stays in INT4.}  The hybrid keeps data in INT4 across
+the gather $\rightarrow$ attention boundary by passing the gathered
+packed tensor directly into \texttt{cuda\_bmm\_fA\_qB\_outer},
+avoiding an FP16 V materialization that would have cost an extra
+allocation and HBM round-trip per layer per step.
 
 \subsection{Limitations}
 
-\emph{Single model architecture.}  All results are specific to
-Llama-2-7B with multi-head attention (32 heads, 32 KV heads).  Models
-with grouped-query attention (Llama-3, Mistral) have fewer KV heads,
-changing the compression profile.
+\emph{Single architecture.}  Results are specific to Llama-2-7B with
+multi-head attention (32 heads, 32 KV heads).  Models with grouped-query
+attention (Llama-3, Mistral) have fewer KV heads, which changes the
+compression profile.
 
-\emph{Small evaluation set.}  LongBench results are based on 20
-examples per task.  Some per-task deltas (e.g., qasper KIVI 2-bit
-$-22\%$) may partially reflect small-$n$ variance rather than a
-systematic effect, although the direction is consistent with the
-expected behavior.
+\emph{Small evaluation set.}  LongBench results use 20 examples per
+task.  Some per-task deltas (e.g., qasper KIVI 2-bit $-22\%$) may
+partially reflect small-$n$ variance, although the direction is
+consistent across tasks.
 
-\emph{MLA checkpoint mismatch.}  The available TransMLA checkpoint was
-calibrated at 256-token context without task finetuning.  A properly
-trained MLA checkpoint would likely recover much of the 65\% quality gap.
+\emph{MLA checkpoint.}  The available TransMLA checkpoint was
+calibrated at 256-token context without task finetuning; a properly
+trained checkpoint would likely recover much of the 65\% quality gap.
 
-\emph{Hybrid scoring cost.}  The KIVI$\times$TopK hybrid's memory win
-(51\%) comes with a decode penalty (−36\%) because scoring must precede
-selection.  Future work using a hierarchical or lazy-scoring approach
-could break this dependency.
+\emph{Hybrid scoring cost.}  The 50\% memory win comes with a 39\%
+decode penalty because scoring must precede selection.  Hierarchical
+or lazy-scoring approaches could decouple them.
 
 % ================================================================
 \section{Conclusion}
 % ================================================================
 
-We conducted a controlled benchmark of five KV cache optimization
-methods across four compression families on Llama-2-7B.  KIVI 4-bit
-provides lossless quality with 4$\times$ KV compression and 1.93$\times$
-throughput at BS=32, making it our recommended default for
-batch-oriented serving.  SnapKV marginally improves LongBench
-overall score with zero runtime overhead.  TopK K=1024 matches baseline
-quality while gaining on noise-heavy retrieval tasks.  MLA's per-token
-latent representation yields consistent 3.9$\times$ KV reduction and
-1.3$\times$ decode speedup at B=1, but requires a properly trained
-checkpoint for production quality.  No single method dominates all
-axes; practitioners should select based on whether batch size,
-context length, or output fidelity is the primary constraint.
+We conducted a controlled benchmark of five KV-cache optimization
+methods spanning four compression families on Llama-2-7B.  KIVI 4-bit
+provides lossless quality with $4\times$ KV compression and
+$1.93\times$ throughput at BS=32---our recommended default for
+batch-oriented serving.  SnapKV marginally improves LongBench overall
+score with zero runtime overhead.  TopK $K\!=\!1024$ matches baseline
+quality and gains substantially on retrieval-heavy tasks.  MLA delivers
+a consistent $3.9\times$ KV reduction and $1.3\times$ decode speedup at
+B=1 but requires a properly trained checkpoint for production quality.
+The KIVI$\times$TopK hybrid stacks memory savings of both axes but pays
+a decode penalty until scoring cost can be reduced.  No single method
+dominates all axes; practitioners should select based on whether batch
+size, context length, or output fidelity is the binding constraint.
 
 Future work should address: (i)~batched decode for TopK to amortize the
-per-step scoring cost and achieve a KIVI-style crossover at BS$\geq$8;
-(ii)~MLA retraining at 4K--8K context with rank 16--32 to preserve the
-3.9$\times$ compression gain while recovering QA quality;
-(iii)~lazy or hierarchical scoring in the KIVI$\times$TopK hybrid to
-decouple the memory win from the decode penalty; and
-(iv)~cross-method composition (e.g., SnapKV eviction + KIVI
-quantization on the retained tokens) to stack savings from orthogonal
-axes.
+per-step scoring cost and produce a KIVI-style crossover at
+BS$\geq$8; (ii)~MLA retraining at 4K--8K context with rank 16--32 to
+preserve $3.9\times$ compression while recovering QA quality;
+(iii)~hierarchical or lazy scoring in the KIVI$\times$TopK hybrid to
+decouple the memory win from the decode penalty; and (iv)~cross-method
+composition, e.g., SnapKV eviction followed by KIVI quantization on the
+retained tokens to stack savings from orthogonal axes.
 
 \appendix
 \section*{AI Use Disclosure}
 
-Per the HPML AI Use Policy.  We used Claude (Anthropic) and GitHub
-Copilot for: debugging CUDA OOM errors, clarifying Triton kernel
-semantics, and polishing report prose.  All reported experimental
-numbers were produced by running our own code on Modal H100 containers.
-All code was reviewed and validated by team members.
+Per the HPML AI Use Policy.  Team members used Claude (Anthropic) and
+GitHub Copilot for: debugging CUDA OOM errors during KIVI kernel
+integration, clarifying Triton kernel semantics, and polishing report
+prose drafted by team members.  All experimental numbers were produced
+by running our own Modal scripts on H100 containers; profiler-trace
+interpretations were verified against raw \texttt{torch.profiler}
+traces in \texttt{results/}.  AI-suggested code was rewritten in our
+own words and re-validated to produce identical outputs to a hand-written
+reference.  No analysis, interpretation, or written argument in this
+report was generated end-to-end by an AI tool.
 
 % ================================================================
 \bibliographystyle{IEEEtran}
