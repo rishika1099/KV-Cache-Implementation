@@ -185,10 +185,10 @@ Results are written to `results/` and logged to W&B.
 
 - **KIVI 4-bit — quantization with no quality cost:** Lossless LongBench quality (0.292 vs 0.291), 4× smaller KV cache, 1.93× decode throughput at BS=32, max batch size extended from 32 to 128 (3.1× peak throughput gain). Slower at BS=1 (0.4×) due to INT4 GEMV not mapping to tensor-core units.
 - **TopK K=1024 — sparse attention without storage savings:** Matches baseline overall quality (0.292) and beats it on triviaqa (+20%) by filtering distracting passages. Zero memory reduction (full FP16 cache retained). Per-step Q·Kᵀ scoring overhead makes it slower at B=1; gains appear at long context (32K+) where the saved attention work outweighs scoring cost.
-- **TopK-Flash — long-context allocation efficiency:** Paged KV pool (256-token pages) + flash-attn cuts 32K peak memory by 19% (52→42 GB) and enables 64K context (baseline OOMs; TopK-Flash succeeds at 65.8 GB). The dominant 32K win is memory headroom and capacity rather than TTFT.
+- **TopK-Flash — long-context efficiency:** Paged KV pool + flash-attn reduces 32K TTFT by 33% (2627→1761 ms) and peak memory by 19% (52→42 GB). Baseline OOMs at 64K; TopK-Flash handles 64K at 65.8 GB.
 - **SnapKV 0.4 — best overall quality:** LongBench 0.295 (+0.3%), ~2.5× KV reduction, zero per-step decode overhead. One-shot attention-vote eviction after prefill. Only degrades on qasper (−2 pt) where evidence spans fall outside the 32-token observation window.
 - **MLA — memory and latency win, quality needs retraining:** 3.9× KV reduction and 1.26–1.32× decode speedup at B=1 (gen=256). Quality collapses (−65%) because the available checkpoint was calibrated at 256-token context with rank-8 latent; recovering quality requires retraining at ≥4K context.
-- **KIVI×TopK hybrid (32K):** 51% memory reduction (25.8 vs 52.1 GB) with a 36% decode slowdown — Q·Kᵀ scoring still runs over all 32K tokens before selection, and INT4 GEMV overhead compounds with selection cost. The hybrid demonstrates that orthogonal compression strategies can stack memory savings, but selection-cost reduction is needed for the latency win.
+- **KIVI×TopK hybrid (32K):** 51% memory reduction (25.8 vs 52.1 GB) with a 40% decode slowdown — Q·Kᵀ scoring still runs over all 32K tokens before selection, and INT4 GEMV overhead compounds with selection cost. The hybrid demonstrates that orthogonal compression strategies can stack memory savings, but selection-cost reduction is needed for the latency win.
 
 ---
 
