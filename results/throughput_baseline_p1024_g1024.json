@@ -1,0 +1,57 @@
+{
+  "method": "baseline",
+  "bits": 2,
+  "prefill_len": 1024,
+  "max_new_tokens": 1024,
+  "model": "meta-llama/Llama-2-7b-chat-hf",
+  "results": {
+    "1": {
+      "oom": false,
+      "mean_tok_per_sec": 144.81356531357446,
+      "mean_elapsed_s": 13.020973489600005,
+      "mean_ms_per_tok": 12.7157944234375,
+      "mean_peak_mem_gb": 14.5660663296,
+      "n_batches": 10
+    },
+    "2": {
+      "oom": false,
+      "mean_tok_per_sec": 234.88071081532604,
+      "mean_elapsed_s": 12.345413106399999,
+      "mean_ms_per_tok": 12.05606748671875,
+      "mean_peak_mem_gb": 15.553285888000001,
+      "n_batches": 10
+    },
+    "4": {
+      "oom": false,
+      "mean_tok_per_sec": 224.73359307251206,
+      "mean_elapsed_s": 18.226273009500012,
+      "mean_ms_per_tok": 17.79909473583985,
+      "mean_peak_mem_gb": 17.872022528,
+      "n_batches": 10
+    },
+    "8": {
+      "oom": false,
+      "mean_tok_per_sec": 324.3366086130993,
+      "mean_elapsed_s": 25.2582479808,
+      "mean_ms_per_tok": 24.666257793750002,
+      "mean_peak_mem_gb": 22.233629696000005,
+      "n_batches": 10
+    },
+    "16": {
+      "oom": false,
+      "mean_tok_per_sec": 402.8890652098268,
+      "mean_elapsed_s": 40.66908425520002,
+      "mean_ms_per_tok": 39.71590259296876,
+      "mean_peak_mem_gb": 30.956975104,
+      "n_batches": 10
+    },
+    "32": {
+      "oom": false,
+      "mean_tok_per_sec": 464.28316531293314,
+      "mean_elapsed_s": 70.60739667019996,
+      "mean_ms_per_tok": 68.95253581074215,
+      "mean_peak_mem_gb": 48.403534848,
+      "n_batches": 10
+    }
+  }
+}

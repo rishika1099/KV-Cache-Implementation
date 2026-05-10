@@ -1,0 +1,82 @@
+[
+  {
+    "method": "baseline",
+    "config": {},
+    "perplexity": 6.9379607721908325
+  },
+  {
+    "method": "kivi",
+    "config": {
+      "bits": 4,
+      "residual_length": 128,
+      "group_size": 32
+    },
+    "perplexity": 6.9274328878894025
+  },
+  {
+    "method": "kivi",
+    "config": {
+      "bits": 2,
+      "residual_length": 128,
+      "group_size": 32
+    },
+    "perplexity": 13.701721406775937
+  },
+  {
+    "method": "snapkv",
+    "config": {
+      "budget_ratio": 0.2,
+      "sink_size": 4,
+      "observation_window": 32
+    },
+    "perplexity": 29.41274498153861
+  },
+  {
+    "method": "snapkv",
+    "config": {
+      "budget_ratio": 0.4,
+      "sink_size": 4,
+      "observation_window": 32
+    },
+    "perplexity": 27.164208202036804
+  },
+  {
+    "method": "snapkv",
+    "config": {
+      "budget_ratio": 0.6,
+      "sink_size": 4,
+      "observation_window": 32
+    },
+    "perplexity": 12.781444552569722
+  },
+  {
+    "method": "topk",
+    "config": {
+      "K": 512,
+      "n_sink": 128,
+      "n_local": 512,
+      "refresh_interval": 0
+    },
+    "perplexity": 6.9379607721908325
+  },
+  {
+    "method": "topk",
+    "config": {
+      "K": 1024,
+      "n_sink": 128,
+      "n_local": 512,
+      "refresh_interval": 50
+    },
+    "perplexity": 6.9379607721908325
+  },
+  {
+    "method": "topk",
+    "config": {
+      "K": 2048,
+      "n_sink": 128,
+      "n_local": 512,
+      "refresh_interval": 50
+    },
+    "perplexity": 6.9379607721908325
+  }
+]

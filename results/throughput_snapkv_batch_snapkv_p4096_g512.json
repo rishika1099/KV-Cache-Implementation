@@ -1,0 +1,58 @@
+{
+  "method": "snapkv",
+  "prefill_len": 4096,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-chat-hf",
+  "snapkv_config": {
+    "window_size": 32,
+    "max_capacity_prompt": 1638,
+    "kernel_size": 7,
+    "pooling": "avgpool",
+    "sink_size": 0
+  },
+  "results": {
+    "1": {
+      "oom": false,
+      "mean_ttft_ms": 148.65321550000132,
+      "mean_decode_tps": 53.296339943510375,
+      "mean_total_tps": 52.5854978266391,
+      "mean_peak_mem_gb": 15.763534848,
+      "n_stable": 2
+    },
+    "2": {
+      "oom": false,
+      "mean_ttft_ms": 298.0801504999988,
+      "mean_decode_tps": 102.68139045492649,
+      "mean_total_tps": 99.8898632972258,
+      "mean_peak_mem_gb": 18.016633344,
+      "n_stable": 2
+    },
+    "4": {
+      "oom": false,
+      "mean_ttft_ms": 589.6070455000029,
+      "mean_decode_tps": 203.38695696004348,
+      "mean_total_tps": 192.49004356366945,
+      "mean_peak_mem_gb": 22.523715072,
+      "n_stable": 2
+    },
+    "8": {
+      "oom": false,
+      "mean_ttft_ms": 1169.4594570000022,
+      "mean_decode_tps": 289.75928452119285,
+      "mean_total_tps": 268.10281480789445,
+      "mean_peak_mem_gb": 31.53522432,
+      "n_stable": 2
+    },
+    "16": {
+      "oom": false,
+      "mean_ttft_ms": 2334.2961760000094,
+      "mean_decode_tps": 353.4007983292631,
+      "mean_total_tps": 321.63952351622646,
+      "mean_peak_mem_gb": 49.560012288,
+      "n_stable": 2
+    },
+    "32": {
+      "oom": true
+    }
+  }
+}

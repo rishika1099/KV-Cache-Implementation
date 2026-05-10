@@ -1,0 +1,2621 @@
+[
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable.",
+    "answers": [
+      "Ground truth is not established in the paper"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 1199.8289,
+      "total_time_s": 1.3401,
+      "decode_time_s": 0.1348,
+      "throughput_tps": 29.6715,
+      "per_token_latency_ms": 33.7024
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "GhostVLAD approach is an extension of the NetVLAD approach, which was proposed for face recognition by Y. Zhong [10]. GhostVLAD works exactly similar to NetVLAD except it adds Ghost clusters along with the NetVLAD clusters. So, now we will have a K+G number of clusters instead of K clusters. Where G is the number of ghost clusters, we want to add (typically 2-4). The Ghost clusters are added to map any noisy or irrelevant content into ghost clusters and are not included during the feature aggregation stage, as shown in",
+    "answers": [
+      "extension of the NetVLAD, adds Ghost clusters along with the NetVLAD clusters",
+      "An extension of NetVLAD which replaces hard assignment-based clustering with soft assignment-based clustering with the additon o fusing Ghost clusters to deal with noisy content."
+    ],
+    "score": 0.25806451612903225,
+    "metrics": {
+      "peak_memory_gb": 17.5966,
+      "kv_cache_mb": 2043.1503,
+      "ttft_ms": 144.9632,
+      "total_time_s": 2.0647,
+      "decode_time_s": 1.9196,
+      "throughput_tps": 66.6795,
+      "per_token_latency_ms": 14.9971
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "68.8% to 71.8%",
+    "answers": [
+      "the attention model, MDREA, also outperforms the best existing research results (WAP 0.690 to 0.688)"
+    ],
+    "score": 0.1111111111111111,
+    "metrics": {
+      "peak_memory_gb": 17.8199,
+      "kv_cache_mb": 2154.8237,
+      "ttft_ms": 169.9179,
+      "total_time_s": 0.3811,
+      "decode_time_s": 0.2111,
+      "throughput_tps": 61.5752,
+      "per_token_latency_ms": 16.2403
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable. The article does not provide any information about additional features or context proposed for improving the accuracy of abusive language detection.",
+    "answers": [
+      "using tweets that one has replied or quoted to as contextual information",
+      "text sequences of context tweets"
+    ],
+    "score": 0.15789473684210528,
+    "metrics": {
+      "peak_memory_gb": 17.2364,
+      "kv_cache_mb": 1846.5423,
+      "ttft_ms": 147.0066,
+      "total_time_s": 0.5725,
+      "decode_time_s": 0.4255,
+      "throughput_tps": 68.1619,
+      "per_token_latency_ms": 14.6709
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable.",
+    "answers": [
+      "FoxNews, CNN, ESPN, New York Times, Time magazine, Huffington Post Weird News, The Guardian, Cartoon Network, Cooking Light, Home Cooking Adventure, Justin Bieber, Nickelodeon, Spongebob, Disney",
+      "FoxNews, CNN, ESPN, New York Times, Time magazine, Huffington Post Weird News, The Guardian, Cartoon Network, Cooking Light, Home Cooking Adventure, Justin Bieber, Nickelodeon, Spongebob, Disney."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 169.833,
+      "total_time_s": 0.2466,
+      "decode_time_s": 0.0766,
+      "throughput_tps": 52.1929,
+      "per_token_latency_ms": 19.1597
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable. The article does not provide information about the language of the data in the hashtag and SemEval datasets.",
+    "answers": [
+      "Yes",
+      "Yes"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8346,
+      "kv_cache_mb": 2162.1637,
+      "ttft_ms": 180.8105,
+      "total_time_s": 0.6907,
+      "decode_time_s": 0.5098,
+      "throughput_tps": 52.96,
+      "per_token_latency_ms": 18.8822
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "unanswerable",
+    "answers": [
+      "Answer with content missing: (Evaluation Metrics section) Precision, Recall, F1-scores, Strict match, METEOR, ROUGE-2"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 151.0126,
+      "total_time_s": 0.2495,
+      "decode_time_s": 0.0984,
+      "throughput_tps": 30.4842,
+      "per_token_latency_ms": 32.8039
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "CNN/DailyMail, NYT, XSum.",
+    "answers": [
+      "CNN/DailyMail news highlights, New York Times Annotated Corpus, XSum",
+      "the CNN/DailyMail news highlights dataset BIBREF24, the New York Times Annotated Corpus (NYT; BIBREF25), XSum BIBREF22"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8178,
+      "kv_cache_mb": 2153.7751,
+      "ttft_ms": 158.5393,
+      "total_time_s": 0.366,
+      "decode_time_s": 0.2073,
+      "throughput_tps": 57.8803,
+      "per_token_latency_ms": 17.277
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable. The article does not provide a comparison of the proposed approach with other WSD approaches employing word embeddings.",
+    "answers": [
+      "GM$\\_$KL achieves better correlation than existing approaches for various metrics on SCWS dataset."
+    ],
+    "score": 0.06451612903225808,
+    "metrics": {
+      "peak_memory_gb": 17.7607,
+      "kv_cache_mb": 2102.3949,
+      "ttft_ms": 231.8411,
+      "total_time_s": 0.6743,
+      "decode_time_s": 0.4423,
+      "throughput_tps": 61.0385,
+      "per_token_latency_ms": 16.3831
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "The ensemble method works by simply averaging the predictions from the constituent single models.",
+    "answers": [
+      "simply averaging the predictions from the constituent single models"
+    ],
+    "score": 0.6,
+    "metrics": {
+      "peak_memory_gb": 17.8231,
+      "kv_cache_mb": 2156.3965,
+      "ttft_ms": 183.0072,
+      "total_time_s": 0.6137,
+      "decode_time_s": 0.4306,
+      "throughput_tps": 39.4769,
+      "per_token_latency_ms": 25.3313
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "EmotionLines dataset consists of dialogues from the TV sitcom Friends and the chat dataset EmotionPush. (From the article)",
+    "answers": [
+      "Friends TV sitcom, Facebook messenger chats"
+    ],
+    "score": 0.09523809523809522,
+    "metrics": {
+      "peak_memory_gb": 17.8346,
+      "kv_cache_mb": 2162.1637,
+      "ttft_ms": 157.8292,
+      "total_time_s": 0.5973,
+      "decode_time_s": 0.4394,
+      "throughput_tps": 63.7294,
+      "per_token_latency_ms": 15.6913
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "English\n\nExplanation: The article mentions \"English Wikipedia\" and \"Simple English Wikipedia\" multiple times, indicating that the paper focuses on the English language.",
+    "answers": [
+      "English",
+      "Simple English"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.3963,
+      "kv_cache_mb": 1943.0113,
+      "ttft_ms": 144.7891,
+      "total_time_s": 0.7185,
+      "decode_time_s": 0.5736,
+      "throughput_tps": 59.2711,
+      "per_token_latency_ms": 16.8716
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "IMDb dataset.\n\nExplanation: According to the article, the sentiment analysis dataset used is the IMDb dataset.",
+    "answers": [
+      "IMDb dataset of movie reviews",
+      "IMDb"
+    ],
+    "score": 0.1111111111111111,
+    "metrics": {
+      "peak_memory_gb": 17.5483,
+      "kv_cache_mb": 2019.0331,
+      "ttft_ms": 186.2017,
+      "total_time_s": 0.7433,
+      "decode_time_s": 0.557,
+      "throughput_tps": 43.0886,
+      "per_token_latency_ms": 23.208
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "The proposed system achieves an accuracy of +1.08 F1 improvements on DL-PS, +1.24 on EC-MT, and +2.38 on EC-UQ, respectively.",
+    "answers": [
+      "F1 scores of 85.99 on the DL-PS data,  75.15 on the EC-MT data and 71.53 on the EC-UQ data ",
+      "F1 of 85.99 on the DL-PS dataset (dialog domain); 75.15 on EC-MT and 71.53 on EC-UQ (e-commerce domain)"
+    ],
+    "score": 0.20512820512820512,
+    "metrics": {
+      "peak_memory_gb": 17.8535,
+      "kv_cache_mb": 2171.6009,
+      "ttft_ms": 166.0305,
+      "total_time_s": 0.8641,
+      "decode_time_s": 0.6979,
+      "throughput_tps": 65.9101,
+      "per_token_latency_ms": 15.1722
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Yes",
+    "answers": [
+      "No"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.4787,
+      "kv_cache_mb": 2148.5322,
+      "ttft_ms": 167.4964,
+      "total_time_s": 0.187,
+      "decode_time_s": 0.0194,
+      "throughput_tps": 51.5324,
+      "per_token_latency_ms": 19.4053
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable. The article does not provide information on the datasets used.",
+    "answers": [
+      "Custom dataset with user questions; set of documents, twitter posts and news articles, all related to finance.",
+      "a self-collected financial intents dataset in Portuguese"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.821,
+      "kv_cache_mb": 2155.348,
+      "ttft_ms": 141.0305,
+      "total_time_s": 0.3783,
+      "decode_time_s": 0.2372,
+      "throughput_tps": 63.2504,
+      "per_token_latency_ms": 15.8102
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "unanswerable",
+    "answers": [
+      "Energy with accuracy of 0.538",
+      "Energy"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 190.9638,
+      "total_time_s": 0.2807,
+      "decode_time_s": 0.0897,
+      "throughput_tps": 33.4561,
+      "per_token_latency_ms": 29.8899
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "unanswerable",
+    "answers": [
+      "RNN-based NMT model, Transformer-NMT"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 147.6125,
+      "total_time_s": 0.2091,
+      "decode_time_s": 0.0614,
+      "throughput_tps": 48.8343,
+      "per_token_latency_ms": 20.4774
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Incorporating neutral features, maximum entropy, and KL divergence.",
+    "answers": [
+      "a regularization term associated with neutral features, the maximum entropy of class distribution regularization term, the KL divergence between reference and predicted class distribution",
+      "a regularization term associated with neutral features,  the maximum entropy of class distribution, KL divergence between reference and predicted class distribution"
+    ],
+    "score": 0.3125,
+    "metrics": {
+      "peak_memory_gb": 17.822,
+      "kv_cache_mb": 2155.8723,
+      "ttft_ms": 150.1441,
+      "total_time_s": 0.4659,
+      "decode_time_s": 0.3157,
+      "throughput_tps": 50.686,
+      "per_token_latency_ms": 19.7293
+    }
+  },
+  {
+    "task": "qasper",
+    "method": "baseline",
+    "config": {},
+    "pred": "Unanswerable.",
+    "answers": [
+      "SVM with unigram, bigram, and trigram features, SVM with average word embedding, SVM with average transformed word embeddings, CNN, ecurrent Convolutional Neural Networks, SVM and deep learning models with comment information",
+      "SVM with unigram, bigram, trigram features, with average word embedding, with average transformed word embeddings, CNN and RCNN, SVM, CNN, RCNN with comment information"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8105,
+      "kv_cache_mb": 2150.1051,
+      "ttft_ms": 154.2287,
+      "total_time_s": 0.2369,
+      "decode_time_s": 0.0826,
+      "throughput_tps": 48.4362,
+      "per_token_latency_ms": 20.6457
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "South West Ultras",
+    "answers": [
+      "South West Ultras fan club."
+    ],
+    "score": 0.5,
+    "metrics": {
+      "peak_memory_gb": 15.4847,
+      "kv_cache_mb": 987.2343,
+      "ttft_ms": 175.466,
+      "total_time_s": 0.2573,
+      "decode_time_s": 0.0817,
+      "throughput_tps": 48.9347,
+      "per_token_latency_ms": 20.4354
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "No",
+    "answers": [
+      "No, it is not necessary."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.4779,
+      "kv_cache_mb": 2148.0079,
+      "ttft_ms": 153.1896,
+      "total_time_s": 0.1734,
+      "decode_time_s": 0.0201,
+      "throughput_tps": 49.836,
+      "per_token_latency_ms": 20.0658
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Low temperature scanning tunneling microscopy and spectroscopy (STM/STS).",
+    "answers": [
+      "Low temperature scanning tunneling microscopy and spectroscopy (STM/STS)."
+    ],
+    "score": 0.75,
+    "metrics": {
+      "peak_memory_gb": 17.8283,
+      "kv_cache_mb": 2159.018,
+      "ttft_ms": 139.4149,
+      "total_time_s": 0.5286,
+      "decode_time_s": 0.3891,
+      "throughput_tps": 56.5422,
+      "per_token_latency_ms": 17.6859
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "_______________________________________________",
+    "answers": [
+      "Implantable Cardioverter Defibrillator (ICD) is a surgically implanted electronic device to treat life-threatening heartbeat irregularities."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8115,
+      "kv_cache_mb": 2150.6294,
+      "ttft_ms": 144.6096,
+      "total_time_s": 0.2543,
+      "decode_time_s": 0.1096,
+      "throughput_tps": 54.7473,
+      "per_token_latency_ms": 18.2657
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "To work in a straight and true fuselage.",
+    "answers": [
+      "The sides of the fuselage are sloped to create a conical section when the fuselage is formed."
+    ],
+    "score": 0.1739130434782609,
+    "metrics": {
+      "peak_memory_gb": 17.8168,
+      "kv_cache_mb": 2153.2508,
+      "ttft_ms": 149.0223,
+      "total_time_s": 0.3282,
+      "decode_time_s": 0.179,
+      "throughput_tps": 61.4373,
+      "per_token_latency_ms": 16.2768
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "The proximity of superconductivity induces pairing in the quantum dots, which can destroy the Kondo effect.",
+    "answers": [
+      "It tends to suppress the Kondo effect."
+    ],
+    "score": 0.19047619047619047,
+    "metrics": {
+      "peak_memory_gb": 17.8325,
+      "kv_cache_mb": 2161.1151,
+      "ttft_ms": 154.341,
+      "total_time_s": 0.5563,
+      "decode_time_s": 0.4019,
+      "throughput_tps": 64.6982,
+      "per_token_latency_ms": 15.4564
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "...electricity is used in many ways, including lighting, heating, and powering electronic devices...",
+    "answers": [
+      "Electricity is used for transport, heating, lighting, communications, and computation."
+    ],
+    "score": 0.4347826086956522,
+    "metrics": {
+      "peak_memory_gb": 17.8315,
+      "kv_cache_mb": 2160.5908,
+      "ttft_ms": 154.155,
+      "total_time_s": 0.507,
+      "decode_time_s": 0.3528,
+      "throughput_tps": 65.1955,
+      "per_token_latency_ms": 15.3385
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Vice Admiral",
+    "answers": [
+      "Vice Admiral."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.2642,
+      "kv_cache_mb": 1874.3296,
+      "ttft_ms": 256.6067,
+      "total_time_s": 0.3449,
+      "decode_time_s": 0.0882,
+      "throughput_tps": 33.9951,
+      "per_token_latency_ms": 29.416
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "15\u20133",
+    "answers": [
+      "They won their first game with a score of 15-3."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 15.923,
+      "kv_cache_mb": 1204.2895,
+      "ttft_ms": 124.8221,
+      "total_time_s": 0.207,
+      "decode_time_s": 0.0821,
+      "throughput_tps": 60.9082,
+      "per_token_latency_ms": 16.4182
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "K3, K4, and K5.",
+    "answers": [
+      "Vitamins K3, K4, and K5."
+    ],
+    "score": 0.6666666666666665,
+    "metrics": {
+      "peak_memory_gb": 17.8168,
+      "kv_cache_mb": 2153.2508,
+      "ttft_ms": 164.2922,
+      "total_time_s": 0.3348,
+      "decode_time_s": 0.1704,
+      "throughput_tps": 58.6696,
+      "per_token_latency_ms": 17.0446
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Yes",
+    "answers": [
+      "Yes, individual molecules of indeno[1,2-a]fluorene can switch between open-shell and closed-shell states by changing their adsorption site on the surface."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.4774,
+      "kv_cache_mb": 2147.4836,
+      "ttft_ms": 156.2923,
+      "total_time_s": 0.1757,
+      "decode_time_s": 0.0193,
+      "throughput_tps": 51.7858,
+      "per_token_latency_ms": 19.3103
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Three-D printing and software development.",
+    "answers": [
+      "3-D printing and software development."
+    ],
+    "score": 0.6,
+    "metrics": {
+      "peak_memory_gb": 17.8136,
+      "kv_cache_mb": 2151.678,
+      "ttft_ms": 193.1161,
+      "total_time_s": 0.4466,
+      "decode_time_s": 0.2534,
+      "throughput_tps": 31.5693,
+      "per_token_latency_ms": 31.6763
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "1.2 mcg/day\n\nPlease let me know if you need anything else.",
+    "answers": [
+      "90 \u03bcg for women and 120 \u03bcg for men."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8273,
+      "kv_cache_mb": 2158.4937,
+      "ttft_ms": 174.2229,
+      "total_time_s": 0.5046,
+      "decode_time_s": 0.3303,
+      "throughput_tps": 63.5833,
+      "per_token_latency_ms": 15.7274
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Watt.",
+    "answers": [
+      "Watt, one joule per second."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 205.9631,
+      "total_time_s": 0.3066,
+      "decode_time_s": 0.1006,
+      "throughput_tps": 29.8312,
+      "per_token_latency_ms": 33.522
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "_________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________________",
+    "answers": [
+      "Flexibility."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8723,
+      "kv_cache_mb": 2181.0381,
+      "ttft_ms": 158.3582,
+      "total_time_s": 1.1234,
+      "decode_time_s": 0.965,
+      "throughput_tps": 66.324,
+      "per_token_latency_ms": 15.0775
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Jacob C. Landau",
+    "answers": [
+      "Jacob C. Landau."
+    ],
+    "score": 0.3333333333333333,
+    "metrics": {
+      "peak_memory_gb": 17.0492,
+      "kv_cache_mb": 1769.472,
+      "ttft_ms": 148.1044,
+      "total_time_s": 0.2522,
+      "decode_time_s": 0.104,
+      "throughput_tps": 48.0703,
+      "per_token_latency_ms": 20.8029
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "Emergent communication",
+    "answers": [
+      "An unsupervised method based on the information bottleneck and contrastive learning."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 148.9871,
+      "total_time_s": 0.2555,
+      "decode_time_s": 0.1064,
+      "throughput_tps": 28.1963,
+      "per_token_latency_ms": 35.4657
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "$\\beta(r)$ is determined by solving the differential equation (\\ref{VolumeConditionR}) for the unknown function $B(r)$.",
+    "answers": [
+      "Using the vacuum Einstein equation and the Baez-Bunn form."
+    ],
+    "score": 0.1904761904761905,
+    "metrics": {
+      "peak_memory_gb": 17.8346,
+      "kv_cache_mb": 2162.1637,
+      "ttft_ms": 225.8204,
+      "total_time_s": 0.6789,
+      "decode_time_s": 0.4529,
+      "throughput_tps": 61.8188,
+      "per_token_latency_ms": 16.1763
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "70-75 meters.",
+    "answers": [
+      "The water depth in the Greater Ekofisk Area is 70-75 meters."
+    ],
+    "score": 0.15384615384615385,
+    "metrics": {
+      "peak_memory_gb": 17.8157,
+      "kv_cache_mb": 2152.7265,
+      "ttft_ms": 157.2274,
+      "total_time_s": 0.2994,
+      "decode_time_s": 0.1421,
+      "throughput_tps": 56.2908,
+      "per_token_latency_ms": 17.7649
+    }
+  },
+  {
+    "task": "multifieldqa_en",
+    "method": "baseline",
+    "config": {},
+    "pred": "yellow fever vaccine.",
+    "answers": [
+      "Other toxic products."
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8136,
+      "kv_cache_mb": 2151.678,
+      "ttft_ms": 572.4286,
+      "total_time_s": 0.8247,
+      "decode_time_s": 0.2522,
+      "throughput_tps": 27.7603,
+      "per_token_latency_ms": 36.0227
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "United States of America\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "The United States of America",
+      "United States Of Amerca",
+      "Us of a",
+      "U.\u2013S.\u2013A.",
+      "Americaland",
+      "United States (U.S.A.)",
+      "Amurika",
+      "Unite states of america",
+      "United States of America (redirect)",
+      "The U S A",
+      "Unietd States",
+      "EE UU",
+      "The U.S.A.",
+      "U.-S.-A.",
+      "Usa",
+      "United Staets of America",
+      "Unites States",
+      "\u00c9tats-Unis d'Am\u00e9rique",
+      "Verenigde State",
+      "U.\u2013S.",
+      "The United States of America.",
+      "The U-S-A",
+      "EEUU",
+      "U. S. A.",
+      "Nagkaisang mga Estado",
+      "The U. S. of America",
+      "The USA",
+      "America (United States)",
+      "The U. S. A.",
+      "U S of America",
+      "UNITED STATES",
+      "Estados Unidos",
+      "The U\u2013S",
+      "American United States",
+      "US and A",
+      "Unitd states",
+      "The US of A",
+      "EE.UU.",
+      "U-S",
+      "The U-S",
+      "Etymology of the United States",
+      "U.S.A.)",
+      "EE. UU.",
+      "United states of america",
+      "US of america",
+      "Verenigde State van Amerika",
+      "Nited States",
+      "United-States",
+      "Unite States",
+      "Estados Unidos de Am\u00e9rica",
+      "UnitedStates",
+      "Estaos Unios",
+      "US of America",
+      "The Usa",
+      "United states of America",
+      "Untied States of America",
+      "The U S of America",
+      "THE AMERICAN UNITED STATES",
+      "The United-States",
+      "U S A",
+      "AmericA",
+      "Estados Unidos de America",
+      "United states",
+      "The U.S. of America",
+      "Amerka",
+      "United\u2013States",
+      "U.s.a.",
+      "United States of America",
+      "United State of America",
+      "United States (US)",
+      "The U.S. of A",
+      "America",
+      "Amercia",
+      "Stati Uniti d'America",
+      "Los Estados Unidos de America",
+      "United Stated",
+      "U.S.",
+      "United States (of America)",
+      "United States",
+      "States of America",
+      "America-class",
+      "Los Estados Unidos",
+      "U,S,",
+      "United States (country)",
+      "Federal United States",
+      "ISO 3166-1:US",
+      "Untied States",
+      "The U.\u2013S.\u2013A.",
+      "VS America",
+      "Amurica",
+      "Etats-Unis d'Amerique",
+      "US",
+      "U.S. OF A",
+      "USofA",
+      "Etats-Unis",
+      "U.S. of A",
+      "United States of America (U.S.A.)",
+      "Amarica",
+      "The United States",
+      "U-S-A",
+      "United States/Introduction",
+      "The Us",
+      "Unitesd states",
+      "The U S of A",
+      "America class",
+      "America magazine",
+      "\u0627\u0644\u0648\u0644\u0627\u064a\u0627\u062a \u0627\u0644\u0645\u062a\u062d\u062f\u0629 \u0627\u0644\u0623\u0645\u0631\u064a\u0643\u064a\u0629",
+      "The U. S. of A",
+      "U S",
+      "(USA)",
+      "The United\u2013States",
+      "United States (U.S.)",
+      "U.-S.",
+      "United States of America (USA)",
+      "'merica",
+      "The US",
+      "United States of America.",
+      "UNited States",
+      "The U.S.",
+      "AMERICA",
+      "United States of America/OldPage",
+      "United+States",
+      "The U S",
+      "United Sates",
+      "THE UNITED STATES OF AMERICA",
+      "U\u2013S\u2013A",
+      "United States Of America",
+      "U.S. of America",
+      "U\u2013S",
+      "Los Estados Unidos de Am\u00e9rica",
+      "The U.-S.",
+      "United sates",
+      "The United States Of America",
+      "America (country)",
+      "United States of American",
+      "United state of america",
+      "The U.\u2013S.",
+      "Amurka",
+      "U. S. of A",
+      "The U. S.",
+      "United States America",
+      "US of A",
+      "\u00c9tats-Unis",
+      "USoA",
+      "USA",
+      "Estaos Un\u00edos",
+      "America, United States of",
+      "U. S. of America",
+      "U.S.American",
+      "(US)",
+      "The U\u2013S\u2013A",
+      "U. S.",
+      "U.S. America",
+      "U.S. A",
+      "Yankee land",
+      "America (US)",
+      "U.S",
+      "America (United States of)",
+      "US (country)",
+      "UNITED STATES OF AMERICA",
+      "U.S.A",
+      "Estados unidos",
+      "Americia",
+      "The US of america",
+      "Vereinigte Staaten",
+      "US America",
+      "These United States of America",
+      "VS Amerika",
+      "Name of the United States",
+      "The united states of america",
+      "Estatos Unitos",
+      "America (USA)",
+      "The U.-S.-A.",
+      "United States of America/Introduction",
+      "The US of America",
+      "Americophile",
+      "V.S. America",
+      "U.S.A.",
+      "U S of A",
+      "V.S. Amerika",
+      "United+States+of+America",
+      "The Unites States of America"
+    ],
+    "score": 0.047619047619047616,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 209.606,
+      "total_time_s": 0.8405,
+      "decode_time_s": 0.6308,
+      "throughput_tps": 50.7267,
+      "per_token_latency_ms": 19.7135
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Black Eyed Peas\n\nPassage:\nThe first known reference to the area now known as Menlo Park is in a 1761",
+    "answers": [
+      "The Black Eyed Peas",
+      "Yesterday (The Black Eyed Peas song)",
+      "Black Eyed Peas",
+      "Instant def",
+      "The Black-Eyed Peas",
+      "The black eyed peas",
+      "Black Eyed Peas (band)",
+      "TBEP",
+      "Roots to Fruits",
+      "Black eyed peas (band)",
+      "Black-Eyed Peas",
+      "Black Eyed Peas, The",
+      "Black Eyed peas (group)",
+      "Black eyed pees",
+      "BLACK EYED PEAS",
+      "Black-eyed Peas",
+      "Yesterday (The Black Eyed Peas)",
+      "Black Eye Peas"
+    ],
+    "score": 0.18181818181818185,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 156.3099,
+      "total_time_s": 0.658,
+      "decode_time_s": 0.5016,
+      "throughput_tps": 63.7926,
+      "per_token_latency_ms": 15.6758
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "I Can't Drive 55",
+    "answers": [
+      "55",
+      "fifty-five"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8136,
+      "kv_cache_mb": 2151.678,
+      "ttft_ms": 195.066,
+      "total_time_s": 0.335,
+      "decode_time_s": 0.1398,
+      "throughput_tps": 57.2114,
+      "per_token_latency_ms": 17.479
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Antonio Vivaldi",
+    "answers": [
+      "Vivaldi",
+      "A.Vivaldi",
+      "Antonio Lucio Vivaldi",
+      "The Red Priest",
+      "A. Vivaldi",
+      "Prete Rosso",
+      "Antonio Vivaldi",
+      "Il Prete Rosso"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 151.5091,
+      "total_time_s": 0.2429,
+      "decode_time_s": 0.0913,
+      "throughput_tps": 54.7737,
+      "per_token_latency_ms": 18.257
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Dartmoor National Park\n\nNote: The passage is written in a formal and objective tone, providing information about the geographical features and toponym",
+    "answers": [
+      "Dartmoor National Park",
+      "DARTMOOR",
+      "Dartmoor National park",
+      "Dartmoor",
+      "Okehayes Nursery",
+      "Dartymoor"
+    ],
+    "score": 0.07142857142857144,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 258.7324,
+      "total_time_s": 0.7669,
+      "decode_time_s": 0.5081,
+      "throughput_tps": 62.9792,
+      "per_token_latency_ms": 15.8783
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Pig\n\nPassage:\nErrol Brown was born in Kingston, Jamaica, but moved to the UK when he was twelve years old",
+    "answers": [
+      "Chazer",
+      "Piggeh",
+      "Sus (genus)",
+      "Pig",
+      "Pigs",
+      "\ud83d\udc37",
+      "\ud83d\udc16",
+      "\ud83d\udc3d"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 151.4385,
+      "total_time_s": 0.6472,
+      "decode_time_s": 0.4957,
+      "throughput_tps": 64.5586,
+      "per_token_latency_ms": 15.4898
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Fontanelles\n\nPassage:\nHow To Make Money Online - 10 Proven Ways\nMaking money online has become a popular",
+    "answers": [
+      "Fonticulus",
+      "Fontanel",
+      "Soft spot",
+      "Fonticuli cranii",
+      "Fontanell",
+      "Fontanelle",
+      "Depressed fontanelle",
+      "Fontanelles",
+      "FONTANELLE",
+      "Soft spots",
+      "Fonticuli",
+      "Fontanels"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 218.5144,
+      "total_time_s": 0.7059,
+      "decode_time_s": 0.4873,
+      "throughput_tps": 65.6673,
+      "per_token_latency_ms": 15.2283
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Berkshire",
+    "answers": [
+      "Berkshire, England",
+      "Highway, Berkshire",
+      "Royal Country of Berkshire",
+      "Berkshire",
+      "Royal Berkshire",
+      "County of Berkshire",
+      "Royal County of Berkshire",
+      "County of Berks"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 188.2238,
+      "total_time_s": 0.2613,
+      "decode_time_s": 0.073,
+      "throughput_tps": 41.0869,
+      "per_token_latency_ms": 24.3387
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Elysian Fields",
+    "answers": [
+      "Alysian fields",
+      "Elysian Fields",
+      "Elysian Fields (disambiguation)",
+      "The Elysian Fields",
+      "Elysiane fields",
+      "Elysian fields"
+    ],
+    "score": 0.3636363636363636,
+    "metrics": {
+      "peak_memory_gb": 17.8115,
+      "kv_cache_mb": 2150.6294,
+      "ttft_ms": 150.7953,
+      "total_time_s": 0.2666,
+      "decode_time_s": 0.1157,
+      "throughput_tps": 51.8743,
+      "per_token_latency_ms": 19.2774
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Ben-Hur",
+    "answers": [
+      "Ben hur",
+      "Ben-Hur (film)",
+      "Ben hurr",
+      "Ben-hur",
+      "Ben-Hur (disambiguation)",
+      "Ben Hurr",
+      "Ben-Hur",
+      "Ben Hur"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 190.785,
+      "total_time_s": 0.2816,
+      "decode_time_s": 0.0907,
+      "throughput_tps": 44.106,
+      "per_token_latency_ms": 22.6727
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Crystal Gayle\n\nNote:\nThe answer provided is based on the information available on the provided passage, and may not be accurate or up-",
+    "answers": [
+      "Crystal Gayle discography",
+      "Crystal Gayle",
+      "Crystal gale"
+    ],
+    "score": 0.08,
+    "metrics": {
+      "peak_memory_gb": 17.8377,
+      "kv_cache_mb": 2163.7366,
+      "ttft_ms": 155.4724,
+      "total_time_s": 0.6466,
+      "decode_time_s": 0.491,
+      "throughput_tps": 65.17,
+      "per_token_latency_ms": 15.3445
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "It means the end of the piece.",
+    "answers": [
+      "The End.",
+      "The End (television)",
+      "The End (book)",
+      "The End",
+      "The End (disambiguation)",
+      "The END",
+      "The End (album)",
+      "The End(album)",
+      "The End (Single)",
+      "The End (band)",
+      "The End (film)",
+      "The End (song)",
+      "The end"
+    ],
+    "score": 0.09523809523809522,
+    "metrics": {
+      "peak_memory_gb": 17.8126,
+      "kv_cache_mb": 2151.1537,
+      "ttft_ms": 151.0931,
+      "total_time_s": 0.2952,
+      "decode_time_s": 0.144,
+      "throughput_tps": 55.566,
+      "per_token_latency_ms": 17.9966
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Nadine Coyle",
+    "answers": [
+      "Nadine Elizabeth Louise Coyle",
+      "Outta My Mind",
+      "Nadine Coyle discography",
+      "NADINE COYLE",
+      "Girl On the Loose",
+      "Nadine Coyle"
+    ],
+    "score": 0.11764705882352941,
+    "metrics": {
+      "peak_memory_gb": 17.8126,
+      "kv_cache_mb": 2151.1537,
+      "ttft_ms": 331.5391,
+      "total_time_s": 0.4518,
+      "decode_time_s": 0.1201,
+      "throughput_tps": 41.6254,
+      "per_token_latency_ms": 24.0238
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Too long, didn't read",
+    "answers": [
+      "TL;DR",
+      "Tl;dr",
+      "Too long, didn't read",
+      "TL-DR",
+      "Too long; didn't read"
+    ],
+    "score": 0.30769230769230765,
+    "metrics": {
+      "peak_memory_gb": 17.8136,
+      "kv_cache_mb": 2151.678,
+      "ttft_ms": 145.2424,
+      "total_time_s": 0.282,
+      "decode_time_s": 0.1366,
+      "throughput_tps": 58.5441,
+      "per_token_latency_ms": 17.0811
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "SMERSH",
+    "answers": [
+      "Smert' Shpionam",
+      "SMERSH",
+      "\u0421\u041c\u0415\u0420\u0428",
+      "Smersh",
+      "NKVD Special Section"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 186.2955,
+      "total_time_s": 0.2611,
+      "decode_time_s": 0.0748,
+      "throughput_tps": 40.1274,
+      "per_token_latency_ms": 24.9206
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Baby buggy",
+    "answers": [
+      "Baby Buggy",
+      "Baby buggy"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 172.9741,
+      "total_time_s": 0.2565,
+      "decode_time_s": 0.0834,
+      "throughput_tps": 47.9397,
+      "per_token_latency_ms": 20.8596
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Brighton\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "Brighthelmstone",
+      "UN/LOCODE:GBBSH",
+      "Brighton music",
+      "Brighton Ferry",
+      "Brighton, UK",
+      "Brighton, Sussex",
+      "Mayor of Brighton",
+      "Brighton, East Sussex",
+      "Brighton Borough Council",
+      "County Borough of Brighton",
+      "Brighton, England",
+      "Brighton"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8388,
+      "kv_cache_mb": 2164.2609,
+      "ttft_ms": 216.8438,
+      "total_time_s": 0.7236,
+      "decode_time_s": 0.5067,
+      "throughput_tps": 63.1579,
+      "per_token_latency_ms": 15.8333
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "James Blunt\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "James bLUNT",
+      "James blunt",
+      "JAMES BLUNT",
+      "Blunty",
+      "James Blunt",
+      "James Hillier Blount",
+      "Blunt, James"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.7289,
+      "kv_cache_mb": 1607.9913,
+      "ttft_ms": 189.3549,
+      "total_time_s": 0.7353,
+      "decode_time_s": 0.5458,
+      "throughput_tps": 58.6303,
+      "per_token_latency_ms": 17.056
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "BASKETBALL",
+    "answers": [
+      "Court (volleyball)",
+      "Volley ball",
+      "Libero (volleyball)",
+      "Serve (Volleyball)",
+      "Spike (volleyball)",
+      "Vollyball",
+      "Spike (Volleyball)",
+      "Outside hitter",
+      "VolleyBall",
+      "Volleyball dig",
+      "Rally point system",
+      "Indoor volleyball",
+      "History of volleyball",
+      "Volleyball",
+      "\ud83c\udfd0",
+      "V-ball",
+      "Lebro",
+      "High school volleyball",
+      "Volley-Ball",
+      "Volley Ball",
+      "Setter (Volleyball)",
+      "Mintonette",
+      "Volleyball court",
+      "VOLLEYBALL",
+      "Serve (volleyball)",
+      "Volleyball rules",
+      "Volley-ball"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8115,
+      "kv_cache_mb": 2150.6294,
+      "ttft_ms": 229.2613,
+      "total_time_s": 0.3919,
+      "decode_time_s": 0.1625,
+      "throughput_tps": 36.9188,
+      "per_token_latency_ms": 27.0864
+    }
+  },
+  {
+    "task": "triviaqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Orange\n\nPassage:\nThe 1975 United States Bicentennial Coin Proof Set\nThe 1975",
+    "answers": [
+      "Orange (album)",
+      "Orangeishness",
+      "Orange (film)",
+      "Orangishness",
+      "Orangeishly",
+      "Orangishly",
+      "Orange",
+      "Oranfe",
+      "Orange (disambiguation)"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8398,
+      "kv_cache_mb": 2164.7852,
+      "ttft_ms": 154.0001,
+      "total_time_s": 0.6412,
+      "decode_time_s": 0.4871,
+      "throughput_tps": 65.6945,
+      "per_token_latency_ms": 15.222
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Ilona Zr\u00ednyi was born in Ozalj, present-day Croatia.",
+    "answers": [
+      "Ozalj"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8262,
+      "kv_cache_mb": 2157.9694,
+      "ttft_ms": 154.6414,
+      "total_time_s": 0.4718,
+      "decode_time_s": 0.3171,
+      "throughput_tps": 63.0746,
+      "per_token_latency_ms": 15.8542
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Elizabeth (biblical figure)",
+    "answers": [
+      "John the Baptist"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8126,
+      "kv_cache_mb": 2151.1537,
+      "ttft_ms": 167.4259,
+      "total_time_s": 0.2925,
+      "decode_time_s": 0.125,
+      "throughput_tps": 56.0027,
+      "per_token_latency_ms": 17.8563
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "France",
+    "answers": [
+      "Cahiers du cin\u00e9ma"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.4779,
+      "kv_cache_mb": 2148.0079,
+      "ttft_ms": 149.5372,
+      "total_time_s": 0.1699,
+      "decode_time_s": 0.0202,
+      "throughput_tps": 49.4286,
+      "per_token_latency_ms": 20.2312
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Yes.",
+    "answers": [
+      "no"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8073,
+      "kv_cache_mb": 2148.5322,
+      "ttft_ms": 139.0745,
+      "total_time_s": 0.1897,
+      "decode_time_s": 0.0505,
+      "throughput_tps": 39.5971,
+      "per_token_latency_ms": 25.2543
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "c.\u20091510",
+    "answers": [
+      "1510"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8126,
+      "kv_cache_mb": 2151.1537,
+      "ttft_ms": 153.8593,
+      "total_time_s": 0.3142,
+      "decode_time_s": 0.1602,
+      "throughput_tps": 43.6825,
+      "per_token_latency_ms": 22.8925
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Kaya Alp",
+    "answers": [
+      "Edward Watson"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 210.5258,
+      "total_time_s": 0.3105,
+      "decode_time_s": 0.0999,
+      "throughput_tps": 40.0386,
+      "per_token_latency_ms": 24.9759
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "23 November 1306",
+    "answers": [
+      "16 September 1360"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8147,
+      "kv_cache_mb": 2152.2022,
+      "ttft_ms": 150.8974,
+      "total_time_s": 0.3046,
+      "decode_time_s": 0.1536,
+      "throughput_tps": 58.578,
+      "per_token_latency_ms": 17.0713
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Bill Dundee",
+    "answers": [
+      "Cunimund"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 165.2476,
+      "total_time_s": 0.2984,
+      "decode_time_s": 0.133,
+      "throughput_tps": 30.0749,
+      "per_token_latency_ms": 33.2503
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Blackrock, County Louth, Ireland",
+    "answers": [
+      "St Patrick's College"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8136,
+      "kv_cache_mb": 2151.678,
+      "ttft_ms": 215.886,
+      "total_time_s": 0.3579,
+      "decode_time_s": 0.142,
+      "throughput_tps": 56.3506,
+      "per_token_latency_ms": 17.746
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "SRI International",
+    "answers": [
+      "Bob Jones University"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8084,
+      "kv_cache_mb": 2149.0565,
+      "ttft_ms": 150.4499,
+      "total_time_s": 0.2134,
+      "decode_time_s": 0.0628,
+      "throughput_tps": 47.7484,
+      "per_token_latency_ms": 20.9431
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "The Secret Invasion",
+    "answers": [
+      "The House Of The Seven Hawks"
+    ],
+    "score": 0.2222222222222222,
+    "metrics": {
+      "peak_memory_gb": 17.8115,
+      "kv_cache_mb": 2150.6294,
+      "ttft_ms": 183.5716,
+      "total_time_s": 0.3152,
+      "decode_time_s": 0.1316,
+      "throughput_tps": 38.003,
+      "per_token_latency_ms": 26.3137
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Margaret of Brabant.",
+    "answers": [
+      "Marie of Hohenstaufen"
+    ],
+    "score": 0.3333333333333333,
+    "metrics": {
+      "peak_memory_gb": 17.8115,
+      "kv_cache_mb": 2150.6294,
+      "ttft_ms": 150.0016,
+      "total_time_s": 0.2691,
+      "decode_time_s": 0.119,
+      "throughput_tps": 50.4287,
+      "per_token_latency_ms": 19.83
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Adelaide, Countess of Soissons",
+    "answers": [
+      "Guy II, Count of Soissons"
+    ],
+    "score": 0.22222222222222224,
+    "metrics": {
+      "peak_memory_gb": 16.2544,
+      "kv_cache_mb": 1372.0617,
+      "ttft_ms": 214.8192,
+      "total_time_s": 0.3648,
+      "decode_time_s": 0.1498,
+      "throughput_tps": 66.7353,
+      "per_token_latency_ms": 14.9846
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "1837",
+    "answers": [
+      "26 April 1872"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8105,
+      "kv_cache_mb": 2150.1051,
+      "ttft_ms": 148.1591,
+      "total_time_s": 0.2379,
+      "decode_time_s": 0.0897,
+      "throughput_tps": 55.7539,
+      "per_token_latency_ms": 17.936
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "United States",
+    "answers": [
+      "America"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8073,
+      "kv_cache_mb": 2148.5322,
+      "ttft_ms": 276.334,
+      "total_time_s": 0.3488,
+      "decode_time_s": 0.0724,
+      "throughput_tps": 27.633,
+      "per_token_latency_ms": 36.1886
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Edward Buzzell",
+    "answers": [
+      "Ona Munson"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8094,
+      "kv_cache_mb": 2149.5808,
+      "ttft_ms": 150.4355,
+      "total_time_s": 0.2297,
+      "decode_time_s": 0.0792,
+      "throughput_tps": 50.5008,
+      "per_token_latency_ms": 19.8017
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Indradhanura Chhai",
+    "answers": [
+      "The Death Of Black King"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.6812,
+      "kv_cache_mb": 1560.2811,
+      "ttft_ms": 121.706,
+      "total_time_s": 0.2295,
+      "decode_time_s": 0.1077,
+      "throughput_tps": 55.7014,
+      "per_token_latency_ms": 17.9529
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Yes.",
+    "answers": [
+      "no"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8073,
+      "kv_cache_mb": 2148.5322,
+      "ttft_ms": 249.0595,
+      "total_time_s": 0.3153,
+      "decode_time_s": 0.0662,
+      "throughput_tps": 30.2115,
+      "per_token_latency_ms": 33.1
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Yes",
+    "answers": [
+      "no"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 14.459,
+      "kv_cache_mb": 686.8173,
+      "ttft_ms": 147.3704,
+      "total_time_s": 0.1655,
+      "decode_time_s": 0.018,
+      "throughput_tps": 55.5558,
+      "per_token_latency_ms": 17.9999
+    }
+  },
+  {
+    "task": "2wikimqa",
+    "method": "baseline",
+    "config": {},
+    "pred": "Renaldo Rama was born in Albania.",
+    "answers": [
+      "Mysore"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8168,
+      "kv_cache_mb": 2153.2508,
+      "ttft_ms": 172.5839,
+      "total_time_s": 0.3635,
+      "decode_time_s": 0.1908,
+      "throughput_tps": 57.6484,
+      "per_token_latency_ms": 17.3465
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nThe Occupy movement continues to make headlines across the country, with protesters facing eviction deadlines in Philadelphia and Los Angeles. In Philadelphia, protesters remained on site into the evening, despite a deadline set by the mayor, and police ultimately decided not to evict them. In Los Angeles, police closed in on the encampment before dawn, but stopped short of clearing it, and four demonstrators were arrested. The city councilman urged Occupy LA to move indoors and into politics. In other news, the LAPD declared an unlawful assembly on the streets surrounding City Hall and ordered Occupy L.A. protesters to disperse or face arrest, but no arrests have yet been made. The Occupy Los Angeles encampment at City Hall Park is seen before the midnight deadline for eviction from City Hall Park passes, with police in riot gear closing in before dawn. Attorneys for Occupy LA have asked a federal judge for an injunction barring police from evicting the camp.",
+    "answers": [
+      "The Occupy LA encampment got a stay of execution this morning\u2014though a few arrests have been reported beyond the boundaries of City Hall Park. Two hours after protesters defied city hall's order to vacate the park by 12:01am, lawyer and Occupy supporter Jim Lafferty told Reuters he expected police to give the camp a two-day reprieve. At around 5am, police told protesters over a loudspeaker that they didn't intend to clear the park, the LA Times reports. Police do, however, intend to clear protesters out of the street, and several people who refused to move out of an intersection have already been arrested. \"We definitely need to get morning traffic in,\" a police commander explained. Everything also seems calm at Occupy Philadelphia, where protesters defied a 5pm Sunday deadline to disperse. But as of last night, a police inspector said they didn't intend to forcibly evict anyone. \"We look forward to working with Occupy Philadelphia and a resolution of the problem,\" he told the Philadelphia Inquirer. \"Confrontation is never good.\""
+    ],
+    "score": 0.25925925925925924,
+    "metrics": {
+      "peak_memory_gb": 17.1058,
+      "kv_cache_mb": 1797.7836,
+      "ttft_ms": 135.1647,
+      "total_time_s": 3.3257,
+      "decode_time_s": 3.1905,
+      "throughput_tps": 71.1493,
+      "per_token_latency_ms": 14.055
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nMikhail Kalashnikov, the inventor of the AK-47 assault rifle, has expressed guilt over the many deaths caused by his weapon in a letter to the head of the Russian Orthodox Church. In the letter, Kalashnikov wrote that he is \"spiritually pained\" by the deaths caused by his rifle and wonders if he is morally responsible for them. The letter was published by Izvestia after Kalashnikov's death in December at the age of 94. Kalashnikov's invention has been sold worldwide and is considered one of the most famous weapons in history. However, he refused to accept responsibility for the deaths caused by his weapon, blaming the policies of other countries that acquired it. Despite his legacy as a weapons designer, Kalashnikov was baptized at the age of 91 and was later buried in a church in Moscow. The Russian Orthodox Church has supported Kalashnikov's invention, saying that it is meant to defend the country, not to be used by criminals or terrorists.",
+    "answers": [
+      "In our own obituary of AK-47 inventor Mikhail Kalashnikov last month, we included this quote: The rifle was invented \"for the protection of the Motherland,\" he said. \"I have no regrets and bear no responsibility for how politicians have used it.\" It turns out \"no regrets\" might not have exactly been true. The AFP picks up a report from Russia's Izvestia that Kalashnikov penned a letter to the head of the Russian Orthodox Church nine months before his December death in which he wrote of \"unbearable ... spiritual pain\" and asked about his culpability. It contains this line: \"I keep having the same unsolved question: if my rifle took away people's lives, then can it be that I ... am guilty for people's deaths, even if they were enemies?\" AFP notes that Izvestia ran a copy of the letter, which is typed on Kalashnikov's personal stationery and signed \"with a wavering hand.\" A rep for Patriarch Kirill confirms that the letter was sent, and says the church leader wrote a reply\u2014one that very may well have calmed his fears. Says the rep, \"The Church has a very definite position: when weapons serve to protect the Fatherland, the Church supports both its creators and the soldiers who use it.\" But the BBC notes that it's not clear whether every word came from Kalashnikov: Izvestia reports that his daughter believes a priest helped him write the letter."
+    ],
+    "score": 0.27799227799227794,
+    "metrics": {
+      "peak_memory_gb": 15.8758,
+      "kv_cache_mb": 1157.1036,
+      "ttft_ms": 131.9056,
+      "total_time_s": 3.5246,
+      "decode_time_s": 3.3926,
+      "throughput_tps": 69.858,
+      "per_token_latency_ms": 14.3148
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nOn November 1, a gunman opened fire at Los Angeles International Airport, killing Transportation Security Administration (TSA) officer Gerardo Hernandez and wounding three others. The gunman, Paul Ciancia, was shot by airport police and later charged with killing Hernandez and targeting TSA employees. The incident has raised questions about coordination between police and fire departments, with some officials suggesting that a lack of coordination may have prevented speedy treatment for Hernandez and other victims. The TSA has also faced criticism for its response to the incident, with some workers expressing concerns about a lack of coordination between agencies. The gunman, Ciancia, remains in fair condition at a hospital and faces a potential death sentence. A public memorial service was held for Hernandez on the same day as the shooting.",
+    "answers": [
+      "Unnamed officials say TSA officer Gerardo Hernandez lay bleeding for 33 minutes at LAX before being taken to an ambulance. For 28 of those minutes, alleged shooter Paul Ciancia was in police custody, though officers hadn't yet declared the area safe to enter. Officers checked on Hernandez, who was just 20 feet from an exit, then moved on while paramedics waited 150 yards away, the AP reports, noting it's not clear if immediate attention might have saved Hernandez's life. Now under review: the conversations took place between police and fire commanders to determine when it was safe enough to enter, and whether paramedics could have gone into the terminal earlier. While an officer who checked on Hernandez about 5 minutes after he was shot told numerous officers he was dead, the AP reports that it's not known whether that officer had the training needed to make that determination; no first-aid was administered. \"I basically think there's a lack of coordination between entities at this airport. That lack of coordination may have led to something that shouldn't have happened,\" an LAX employee says. \"We may be talking about Officer Hernandez as a survivor.\" The results of the investigation could be months away, the AP adds. Ciancia was on Tuesday upgraded from critical to fair condition at UCLA Medical Center."
+    ],
+    "score": 0.24680851063829787,
+    "metrics": {
+      "peak_memory_gb": 15.772,
+      "kv_cache_mb": 1130.8892,
+      "ttft_ms": 127.0784,
+      "total_time_s": 2.6181,
+      "decode_time_s": 2.491,
+      "throughput_tps": 72.2616,
+      "per_token_latency_ms": 13.8386
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nThe European Union's top diplomat, Catherine Ashton, met with deposed Egyptian President Mohamed Morsi on Monday night in an effort to mediate a resolution to Egypt's political crisis. This meeting was the first contact Morsi has had with an independent official since he was taken into military custody nearly a month ago. Ashton declined to go into detail about her two-hour conversation with Morsi, but she said he was in good condition and had access to newspapers and television. The meeting appeared to have at least temporarily calmed the tense capital after a weekend of violence left at least 80 pro-Morsi demonstrators and a police officer dead. Ashton also met with Egypt's interim vice president, Mohamed ElBaradei, who said that Morsi had \"failed\" during his year in power but that his Muslim Brotherhood allies should be part of the new political \"road map\" going forward. The European Union has emphasized that Egyptians, and particularly those in power, must ensure that the country moves forward along a democratic path. Officials from the Brotherhood's Freedom and Justice Party told Ashton that any political solution for Egypt must be based on \"the return of the president.\" The statement said the demonstrations in support of Morsi would not stop until \"constitutional legitimacy\" was restored. U.S. Defense Secretary Chuck Hagel spoke by telephone with Egypt's military leader, Gen. Abdel Fatah al-Sissi, and urged \"restraint\" in dealing with protesters and called for \"an inclusive reconciliation process.\"",
+    "answers": [
+      "Under circumstances that sound straight out of a Le Carre novel, Mohamed Morsi has met with an outsider for the first time since being dumped by Egypt's military, holding a midnight meeting with the European Union's top diplomat at an \"undisclosed location\" last night, the Wall Street Journal. Though many have feared for Morsi's well-being after almost a month in captivity, Catherine Ashton, the EU's foreign affairs and security policy chief, reports that he is well and has access to TV and newspapers, Reuters reports. The pair had a \"very long and in-depth conversation,\" Ashton says. Ashton, who has met with several other Egyptian political figures while in the country, says she wasn't there to help Morsi break out, but rather to facilitate discussions toward a peaceful end to the country's political unrest, the Washington Post reports. \"First of all, we are here to help. We are not here to impose,\" she says. \"The people of Egypt will determine their own future.\" But will Morsi play ball? \"He's a very proud man,\" says a source close to the former leader, per the Journal. \"I think the idea of doing anything on (the) army's terms will not work with him.\""
+    ],
+    "score": 0.2572347266881029,
+    "metrics": {
+      "peak_memory_gb": 16.1951,
+      "kv_cache_mb": 1320.6815,
+      "ttft_ms": 151.6602,
+      "total_time_s": 5.2082,
+      "decode_time_s": 5.0565,
+      "throughput_tps": 71.7893,
+      "per_token_latency_ms": 13.9296
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nThe US Navy has postponed a port call in Naples, Italy, for a destroyer to remain in striking distance of Syria during the crisis. Pentagon officials said the decision did not reflect any specific orders from Washington. Meanwhile, Russia has called on Syria's President Bashar al-Assad to allow UN investigators into the areas east of Damascus where the attack occurred. However, American and foreign diplomats believe Russia's move does not reflect any shift in its backing of Mr. Assad or its resistance to punitive measures in the Security Council. Russia's foreign ministry has put the onus on Syria's opposition forces to provide secure access to the site of the \"reported incident.\" Additionally, a spokesman for Russia's foreign ministry, Aleksandr K. Lukashevich, has accused the Syrian opposition of not cooperating with the investigation by UN experts. US intelligence agencies have also detected activity at locations known to be chemical weapons sites before Wednesday's attack, which may have been preparations for the assault.",
+    "answers": [
+      "A government backed by Russia is accused of killing its own civilians. That applies not only to the current situation in Syria but to the 1999 situation in Kosovo. And as the New York Times reports, top US officials are keeping Kosovo very much in mind as they weigh their options. President Obama would likely never get the approval of the UN Security Council for a military response because of Russia's veto power. When Bill Clinton was in the same boat in 1999, he turned to NATO and got its blessing for 78 days of airstrikes. \u201cIt\u2019s a step too far to say we\u2019re drawing up legal justifications for an action, given that the president hasn\u2019t made a decision,\u201d a government official tells the Times. \u201cBut Kosovo, of course, is a precedent of something that is perhaps similar.\u201d Obama was meeting today with national security aides to determine next steps if the US concludes that Bashar al-Assad used chemical weapons. (Assad in turn accused the rebels of doing the same today.) Meanwhile, the US Navy is keeping two destroyers positioned in the Mediterranean in case the green light is given for a cruise-missile attack, reports the Wall Street Journal."
+    ],
+    "score": 0.2047244094488189,
+    "metrics": {
+      "peak_memory_gb": 14.4739,
+      "kv_cache_mb": 481.8207,
+      "ttft_ms": 148.3377,
+      "total_time_s": 3.2117,
+      "decode_time_s": 3.0633,
+      "throughput_tps": 75.0823,
+      "per_token_latency_ms": 13.3187
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nKleiner Perkins Caufield & Byers, a venture capital firm, has filed legal documents seeking $972,814 in legal costs from Ellen Pao, a former partner who lost a high-profile gender discrimination case against the firm. The firm offered to settle the case with Pao before it went to trial, offering her almost $1 million, but Pao's lawyers didn't respond. Now, Kleiner is asking Pao to reimburse the firm for the legal costs incurred during the trial, or else the firm will waive its attempt to recover the costs. Pao's legal team is considering the proposal and will respond in the next two weeks. Meanwhile, a jury cleared Kleiner Perkins in March of claims it short-circuited Pao's career because she is a woman. The trial sparked a wide discussion about gender diversity in the technology industry.",
+    "answers": [
+      "Even though Ellen Pao lost her gender-discrimination suit against a former employer, she's still widely hailed as a hero for bringing the boys' club atmosphere of Silicon Valley under a microscope. But now she's got a tough choice on her hands: The venture-capital firm she sued, Kleiner Perkins Caufield & Byers, says she owes almost $1 million in legal fees\u2014but it will drop its pursuit of the money if she doesn't appeal last month's ruling, reports the Wall Street Journal. Pao's attorneys say they will have a decision in a few weeks. Kleiner Perkins says it offered Pao about $1 million as a settlement before the trial began, but received no response from her legal team. Because of that offer, the company can now go after Pao for expensive witness fees, explains the New York Times. One factor that will surely weigh on the decision: A review of previous cases suggests that Pao has only a slim chance of winning on appeal, reports Reuters."
+    ],
+    "score": 0.3222748815165877,
+    "metrics": {
+      "peak_memory_gb": 15.4952,
+      "kv_cache_mb": 992.4772,
+      "ttft_ms": 179.5308,
+      "total_time_s": 3.0082,
+      "decode_time_s": 2.8286,
+      "throughput_tps": 71.4132,
+      "per_token_latency_ms": 14.003
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nA 76-year-old man, Jack McCullough, was released from prison after being wrongly convicted of the 1957 murder of 7-year-old Maria Ridulph in Sycamore, Illinois. McCullough's conviction was overturned after a prosecutor found \"clear and convincing evidence\" that he was innocent. The case had been reopened in 2008 after McCullough's half-sister emailed a tip to the police. The investigation found that McCullough was 40 miles away from the scene of the crime when Maria was abducted. The judge in the case, William Brady, ruled that there was insufficient evidence to support McCullough's conviction. McCullough's release has sparked controversy, with Maria's family members expressing their belief that he is guilty and seeking the appointment of a special prosecutor to keep him behind bars.",
+    "answers": [
+      "A man convicted four years ago in the oldest cold case ever tried was freed Friday after an Illinois judge vacated his conviction and subsequent life sentence, CNN reports. According to CBS News, 76-year-old Jack McCullough was convicted of kidnapping a 7-year-old girl, choking her, and stabbing her to death in 1957. The case was reopened in 2008, and McCullough was arrested in 2011 and convicted the following year. After an appeal by McCullough, Illinois state's attorney Richard Schmack launched a six-month investigation that found what he calls \"clear and convincing evidence\" that McCullough is innocent. While the judge Friday vacated McCullough's conviction, he stopped short of declaring him innocent, and a new trial will be held, the Chicago Tribune reports. McCullough, who lived in the same neighborhood as the kidnapped girl, says he was 40 miles away at an Air Force recruiting center at the time of the kidnapping. It's an alibi that passed a polygraph test in 1957 and made it impossible for him to be the culprit based on the FBI's original timeline for the kidnapping. That timeline was later changed by police, and Schmack says documents\u2014including phone and Air Force records\u2014supporting McCullough's alibi were wrongly not allowed at his trial. A friend of the kidnapped girl picked McCullough out of a photo lineup when the case was reopened. But his was the only non-yearbook photo in the lineup, and she picked a different man out of a photo lineup 50 years earlier. That info wasn't allowed at McCullough's trial either. No physical evidence was ever found to support McCullough's conviction."
+    ],
+    "score": 0.3,
+    "metrics": {
+      "peak_memory_gb": 17.2587,
+      "kv_cache_mb": 1862.7953,
+      "ttft_ms": 156.6754,
+      "total_time_s": 3.119,
+      "decode_time_s": 2.9622,
+      "throughput_tps": 71.5681,
+      "per_token_latency_ms": 13.9727
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nThe latest news in the media industry revolves around Rush Limbaugh and his controversial remarks about Georgetown student Sandra Fluke. Several advertisers have pulled their ads from Limbaugh's show in response to his comments, which have been deemed misogynistic. According to a memo circulated by Premiere Radio Networks, 98 advertisers have requested to avoid advertising on Limbaugh's show and other programs with offensive or controversial content. The list of advertisers includes major brands such as Ford, GM, Toyota, Allstate, Geico, Prudential, State Farm, McDonald's, and Subway. The exodus of advertisers has led to the use of free public service announcements during Limbaugh's show on his flagship station, WABC. The incident has sparked a larger conversation about the power of media and the responsibility of media personalities to be mindful of their language and actions.",
+    "answers": [
+      "Rush Limbaugh may be bleeding sponsors\u2014one count now has the number fleeing his show up to 98\u2014because of his \"slut\" comment, but Saturday Night Live had some suggestions last night about who might fill the advertising void. A few of the highlights, as per Mediaite: Misaki Dolphin Poppers: \"Start your day off right, with bits of dolphin.\" Depends for Racists: \"If you pee a little every time you see a Mexican, you need Depends for Racists.\" Schoder's fake rape whistles: \"Help is not on the way.\" Syria Tourism Board: Because, \"Ah! No! There's nowhere to hide!\""
+    ],
+    "score": 0.1590909090909091,
+    "metrics": {
+      "peak_memory_gb": 14.5148,
+      "kv_cache_mb": 502.2679,
+      "ttft_ms": 123.9679,
+      "total_time_s": 3.1213,
+      "decode_time_s": 2.9973,
+      "throughput_tps": 72.3993,
+      "per_token_latency_ms": 13.8123
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nThe news is focused on the Montana Senate race between Democratic Senator Jon Tester and Republican challenger Matt Rosendale. President Trump has made it his mission to unseat Tester, who has been criticized for his role in exposing alleged misconduct by White House physician Adm. Ronny Jackson. Trump has praised Gianforte, who pleaded guilty to misdemeanor assault, and has made light of the incident. The White House Correspondents' Association has condemned Trump's comments, calling them an attack on the First Amendment. The race is seen as one of the most expensive political contests in Montana's history, with millions of dollars pouring in. Tester has touted a bipartisan record in the Senate, while Rosendale has accused Tester of supporting a caravan of immigrants traveling up from Central America. Trump has also spoken about immigration and falsely claimed that Democrats are supporting the caravan. The president's comments on Gianforte have sparked controversy, with some calling for his apology to be accepted.",
+    "answers": [
+      "\"Any guy that can do a body-slam, he's my guy,\" President Trump shouted to a cheering Montana audience Thursday night as he simulated slamming someone to the ground, then noting, \"I shouldn't say that.\" Trump was discussing Rep. Greg Gianforte, who assaulted Guardian reporter Ben Jacobs last year during the special election for the House seat vacated by Ryan Zinke, a misdemeanor assault to which he pleaded guilty and completed community service and an anger management class. Trump said after the incident, he feared Gianforte had blown his chance at the congressional seat. \"I said, 'Oh, this is terrible, he's gonna lose the election,'\" Trump recounted. \"Then I said, 'Well, wait a minute\u2014I know Montana pretty well. I think it might help him.' And it did.\" Trump was in Big Sky Country stumping for Matt Rosendale in his race for Democrat Jon Tester's Senate seat. Reaction came quickly: John Mulholland, US editor of the Guardian, put out a statement after the rally blasting Trump's words as \"an attack on the First Amendment,\" asking for an apology and adding, \"In the aftermath of the murder of Jamal Khashoggi, it runs the risk of inviting other assaults on journalists both here and across the world.\" ABC News reports on what the Toronto Star's Daniel Dale calls the \"most significant\" and \"truly horrible\" moment in the rally: \"The president is gleefully applauding violence against a journalist.\" Trump also praised Gianforte as \"smart\" and then advised the crowd to \"never wrestle him.\" (Trump seems to acknowledge Khashoggi is dead.)"
+    ],
+    "score": 0.23841059602649003,
+    "metrics": {
+      "peak_memory_gb": 15.9964,
+      "kv_cache_mb": 1243.0868,
+      "ttft_ms": 135.7105,
+      "total_time_s": 3.3366,
+      "decode_time_s": 3.2008,
+      "throughput_tps": 74.0438,
+      "per_token_latency_ms": 13.5055
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nA recent study published in the journal Infection and Immunity has found that cigarette smoke exposure can make the superbug MRSA (Methicillin-resistant Staphylococcus aureus) more resistant to killing by immune cells. The study, led by Dr. Laura E. Crotty Alexander of UC San Diego School of Medicine, found that MRSA exposed to cigarette smoke extract became harder to kill, with increased resistance to both macrophages and antimicrobial peptides. This effect was observed in both human cells and mice, and the increased resistance continued for 24 hours after exposure. The study suggests that cigarette smoke may play a role in the growing problem of antibiotic-resistant bacteria, and highlights the need to address the issue of smoking-related illnesses.\n\nIn a separate study published in the same journal, researchers found that cigarette smoke exposure can also function as an alarm to MRSA, warning it to activate its defenses. In lab studies, MRSA bacteria exposed to cigarette smoke extract became harder to kill, and the increased resistance continued for 24 hours after exposure. These findings suggest that cigarette smoke may play a role in the development of antibiotic-resistant bacteria, and highlight the need to address the issue of smoking-related illnesses.\n\nBoth studies were conducted by researchers at UC San Diego School of Medicine, and were funded in part by the U.S. Department of Veterans Affairs. The studies provide new insights into the effects of cigarette smoke on the immune system and the development of antibiotic-resistant bacteria, and highlight the need to address the issue of smoking-related illnesses.",
+    "answers": [
+      "Superbugs such as MRSA are already bad enough. But it turns out that something can make them even nastier: cigarette smoke. Researchers found that antibiotic-resistant bacteria exposed to the smoke became more aggressive and far more difficult to kill, they explain at Eureka Alert. It's almost as if the smoke sets off an alarm that causes the bacteria to strengthen its defenses, explains the Union-Tribune of San Diego. Scientists made the discovery by exposing immune cells to two different batches of MRSA, one normal and one treated with cigarette smoke extract. The bigger the dose of smoke, the bigger the effect, notes Medical Daily. \"We already know that smoking cigarettes harms human respiratory and immune cells, and now we've shown that, on the flipside, smoke can also stress out invasive bacteria and make them more aggressive,\" says lead author Laura Crotty Alexander of UC San Diego. It's a double-whammy: Smokers already have weakened immune systems that make them more susceptible to infectious diseases, and the smoke they inhale seems to make invading pathogens even more dangerous. In this study, the smoke helped MRSA survive longer and kill more mice with pneumonia. (The latest antibiotic-resistant bug to make headlines is a nasty stomach virus.)"
+    ],
+    "score": 0.3178294573643411,
+    "metrics": {
+      "peak_memory_gb": 16.3057,
+      "kv_cache_mb": 1397.7518,
+      "ttft_ms": 226.4657,
+      "total_time_s": 5.7331,
+      "decode_time_s": 5.5065,
+      "throughput_tps": 72.278,
+      "per_token_latency_ms": 13.8355
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nOn January 23, 2017, Fabio Sementilli, a renowned hairstylist and beauty company executive, was found beaten and stabbed at his home in Woodland Hills, Los Angeles. He died at the scene. The police have launched an investigation and are looking for a black 2008 Porsche 911 Carrera with paper license plates, which was missing from the scene. Sementilli was a well-known figure in the hairstyling industry and had established himself as a mentor and positive role model to many. His death has left the industry in shock and grief.\n\nIn related news, a local news crew reported from Sementilli's home on Tuesday, and the LAPD's Homicide Bureau is urging anyone with information about the case to contact them at (818) 374-1925.\n\nMeanwhile, friends and family of Sementilli have taken to social media to pay tribute to him. Eden Sassoon, the daughter of another industry icon Vidal Sassoon and star of Real Housewives Of Beverly Hills, called Sementilli a mentor and friend, saying he was a man who truly cared and made a difference.\n\nIn a 2015 Youtube video, Sementilli said he wanted to be remembered for the relationships he built and how maybe he made people feel. His death has left a void in the industry, and he will be sorely missed.",
+    "answers": [
+      "One of the most renowned hairstylists in Los Angeles was murdered on Monday by intruders who made their getaway in his Porsche, police say. Fabio Sementilli was stabbed several times and was found on his home's patio by his wife and daughter, CBS Los Angeles reports. Paramedics were called but the 49-year-old was bleeding profusely and died at the scene. Police say the Canadian-born hairstylist's 2008 Porsche 911 Carrera was missing from the scene and they believe it was stolen by two men who broke into the upscale Woodland Hills home and attacked Sementilli. Police aren't sure whether the murder was random or a targeted attack, the AP reports. Sementilli gained international recognition during his 30 years as a hairstylist and also served as an exec at companies including Wella, the Los Angeles Daily News reports. He was \"recognized as an exceptional stylist, educator, and visionary,\" Wella said in a statement that describes him as \"an icon in the hairdressing industry.\" A post at Modern Salon says he was a VP of education for cosmetics company Coty, adding that he \"mentored tens of thousands of hairdressers with a hands-on approach either on a one-to-one basis or on a grander scale.\" (This man was murdered just two months after President Obama commuted his sentence.)"
+    ],
+    "score": 0.2826855123674912,
+    "metrics": {
+      "peak_memory_gb": 17.5525,
+      "kv_cache_mb": 2021.1302,
+      "ttft_ms": 369.4662,
+      "total_time_s": 5.2118,
+      "decode_time_s": 4.8423,
+      "throughput_tps": 68.3566,
+      "per_token_latency_ms": 14.6292
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nA recent study by the University of Toulouse's Young-Ho Eom analyzed Wikipedia articles to determine the most important person in the English-language world. The study used Google's PageRank algorithm and found that Frank Sinatra is the most important person, followed by Michael Jackson and Pope Pius XII. However, when the researchers applied a second way of measuring importance, CheiRank, they arrived at a different top 100 list. Carl Linnaeus, the 18th-century Swedish naturalist, topped the list across all languages, as there are many Wikipedia pages with scientific names in every edition that eventually lead back to him. This study is not the first time people have tried to figure out the influence of various historical people, and Linnaeus is not a reliable entrant on the list. Last year, another study found that Karl Marx was history's most influential scholar using a different approach that studied how often academics referenced each other in their own work.",
+    "answers": [
+      "Using methods borrowed from Google, a group of researchers has analyzed all Wikipedia pages and determined that, at least on the English language version of the site, Frank Sinatra is the world's most important person. Second place goes to Michael Jackson, and third to Pope Pius XII. When factoring in all 24 language editions of the online encyclopedia, the team found that Adolf Hitler ranked the most important person, while Michael Jackson was again second and Madonna third, reports the Guardian. \"Our analysis shows that most important historical figures across Wikipedia language editions are born in western countries after the 17th century, and are male,\" the authors write. The researchers combined two algorithms to reach these conclusions. First, Google's PageRank algorithm, which determines a page's importance based on how many other pages link to it. In using PageRank on Wikipedia, the most important person in the world was 18th-century Swedish naturalist Carl Linnaeus, likely because the pages of organism after organism link back to the \"father of taxonomy.\" So the researchers added an algorithm called CheiRank, which determines importance based on the number of outgoing links, the thought being that an important person would himself be connected to other important people, things, and events. Using the two together\u2014an approach they dubbed 2DRank\u2014no one beat out Frank Sinatra on English pages or Adolf Hitler across all language versions. Last year, in a separate study analyzing academic references, one team deemed Karl Marx to be the world's most important scholar, according to the Smithsonian. (Click to read about one of Sinatra's quirks.)"
+    ],
+    "score": 0.38989169675090257,
+    "metrics": {
+      "peak_memory_gb": 15.624,
+      "kv_cache_mb": 1011.3516,
+      "ttft_ms": 149.1586,
+      "total_time_s": 3.2097,
+      "decode_time_s": 3.0605,
+      "throughput_tps": 69.2703,
+      "per_token_latency_ms": 14.4362
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nThe latest iteration of NBC's Celebrity Apprentice, hosted by Arnold Schwarzenegger, premiered on Monday night with mediocre ratings. The show averaged 4.9 million total viewers, which is down 22% from the debut episode of Trump's most recent season hosting the show. The ratings for the key demographic (viewers aged 18 to 49) were also lower, with a 46% decrease from the previous season. Despite the poor ratings, NBC is still promoting the show and its new host. The network is hoping that the show will improve in the coming weeks. In other news, Donald Trump, the former host of the show, will continue to receive an executive producer credit on the show, despite his departure. This has raised some controversy, as Trump has a large stake in the show and will reportedly be compensated by MGM, which owns the majority stake in the production company that owns the rights to the Apprentice franchise.",
+    "answers": [
+      "Arnold Schwarzenegger seems to think Donald Trump needs a lesson in making friends after the president-elect chose to criticize his Celebrity Apprentice successor. \"Wow, the ratings are in and [new host] Arnold Schwarzenegger got 'swamped' (or destroyed) by comparison to the ratings machine, DJT,\" Trump tweeted Friday after the Trump-less show premiered Monday to 4.9 million viewers, according to Nielsen. The last season hosted by Trump averaged 7.6 million viewers, per Fortune. \"So much for \u2026 being a movie star,\" Trump continued. \"But who cares, he supported [John] Kasich & Hillary [Clinton].\" Schwarzenegger offered up a reply on Twitter, tweeting, \"I wish you the best of luck and I hope you'll work for ALL of the American people as aggressively as you worked for your ratings.\" He next shared a video he made after the election in which he quotes Abraham Lincoln's inaugural speech, beginning, \"We are not enemies, but friends. We must not be enemies.\" \"Please study this quote ... @realDonaldTrump,\" he tweeted with the video. \"It inspired me every day I was Governor, and I hope it inspires you.\" (The New York Times is unimpressed with the new season.)"
+    ],
+    "score": 0.25599999999999995,
+    "metrics": {
+      "peak_memory_gb": 14.7423,
+      "kv_cache_mb": 616.0384,
+      "ttft_ms": 190.6011,
+      "total_time_s": 3.1181,
+      "decode_time_s": 2.9274,
+      "throughput_tps": 75.1521,
+      "per_token_latency_ms": 13.3063
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nThe new Samsung Smart TVs allow the company to listen to everything users say, even when the TV is turned off. This has raised privacy concerns, as it is similar to the telescreens in George Orwell's 1984. Samsung collects and stores information through the TV, and users can opt out of data collection. The Smart TV also offers personalized content recommendations and voice recognition features. Microsoft has announced that its new Xbox One console will always be listening to users, even when it is turned off. This has raised privacy concerns, as the console will be constantly listening to users in their living rooms. Microsoft claims that the new Kinect is so sensitive that it can read a user's heartbeat and recognize individual voices. The company has faced privacy concerns over Kinect before, and has promised to build strong privacy protections into its products.",
+    "answers": [
+      "Own a Samsung smart TV? Then take note: Your television is not only listening, it's sending your data to a third party, the Independent reports. The TV's voice-recognition software lets you give it orders, but the product's privacy policy warns that \"personal or other sensitive information ... will be among the data captured and transmitted to a third party through your use of Voice Recognition.\" Samsung tells the BBC that the third party is Nuance, the company that does Samsung's speech-to-text conversion. But intellectual property lawyer Corynne McSherry says it would be nice to see that clarified in Samsung's policy, the Daily Beast reports. \"And I\u2019d definitely like to know whether my words were being transmitted in a secure form,\" she says. An activist tweets that Samsung's policy sounds a lot like the description of \"telescreens\" in George Orwell's dystopian novel, 1984\u2014which reads in part, \"Any sound that Winston made, above the level of a very low whisper, would be picked up by [the screen].\" Unnervingly, it wasn't clear how often \"the Thought Police plugged in on any individual wire was guesswork.\" Samsung, however, says it doesn't keep voice data, and customers can opt to turn off voice-recognition or even unplug the TV from Wi-Fi. And Samsung isn't alone: the Verge reports that XBoxes already use voice recognition while being connected to the Internet. \"Samsung's privacy policy is not unique; its rhetoric just happens to be similar to that of a well-known sci-fi novel,\" the Verge says."
+    ],
+    "score": 0.22480620155038758,
+    "metrics": {
+      "peak_memory_gb": 17.3533,
+      "kv_cache_mb": 1921.5155,
+      "ttft_ms": 193.2708,
+      "total_time_s": 2.9211,
+      "decode_time_s": 2.7277,
+      "throughput_tps": 69.6552,
+      "per_token_latency_ms": 14.3564
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nThe New York Jets cheerleaders have reached a $325,000 settlement with the team in a class-action lawsuit over wages. The settlement covers the 2012-13 and 2013-14 NFL seasons and provides each of the 52 cheerleaders with $2,500 per season worked. The deal also includes an additional $400 payment for each photo shoot the cheerleaders appeared in. The settlement comes after a New Jersey court approved the agreement reached in August 2015. This settlement is the latest in a series of wage disputes between NFL cheerleaders and their teams, with other teams such as the Buffalo Bills, Cincinnati Bengals, Tampa Bay Buccaneers, and Oakland Raiders also facing similar lawsuits. The NFL has been criticized for paying cheerleaders low wages and treating them as independent contractors rather than employees. State Senator Diane Savino has called on the NFL to step in and establish uniform rules for all teams to ensure that cheerleaders receive fair pay and treatment.",
+    "answers": [
+      "A New Jersey court on Wednesday gave the Flight Crew\u2014aka the New York Jets cheerleaders\u2014something to cheer about: a $325,000 settlement of the class-action lawsuit filed in 2014 by a cheerleader identified as Krystal C., CNNMoney reports. That amounts to each of the 52 cheerleaders getting $2,500 per season worked and $400 per photo shoot. The settlement covers the 2012-13 and 2013-14 seasons. New York State Sen. Diane Savino, per the New York Post, cheered the settlement, calling on the NFL to \"develop uniform rules \u2026 to ensure that all cheerleaders in every state received the employee pay and protections they deserve.\" NFL teams have sought to justify low pay for cheerleaders by saying they're independent contractors, CNN notes. In the case of the Flight Crew, Krystal C.'s suit claimed that cheerleaders were compensated $150 per game and $100 for special appearances. But, when you factor in practices and rehearsals, that pans out to $3.77 per hour. Throw in hair, makeup, and transportation expenses and \"the hourly rate goes below $1.50 an hour,\" says the cheerleaders' attorney. The Flight Crew isn't alone: Cheerleaders have taken to the courts to seek higher pay from the Cincinnati Bengals (tentative agreement reached), Tampa Bay Buccaneers (settled for $825,000), Oakland Raiders (settled for $1.25 million), and the Buffalo Bills (class-action suit on the horizon)."
+    ],
+    "score": 0.390625,
+    "metrics": {
+      "peak_memory_gb": 14.9856,
+      "kv_cache_mb": 737.6732,
+      "ttft_ms": 190.9577,
+      "total_time_s": 3.5088,
+      "decode_time_s": 3.3177,
+      "throughput_tps": 72.9424,
+      "per_token_latency_ms": 13.7094
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nThe Centers for Disease Control and Prevention (CDC) is investigating a mysterious illness called acute flaccid myelitis (AFM) that has affected 32 people across the United States this year, including five-year-old Braden Scott, who is now doing much better after being in a rehab facility. The CDC has confirmed that the disease, but they don't know what causes it. The 2014 outbreak of EV-D68 across the United States has been reported, although cases of it and other enteroviruses have been seen in some areas. The CDC's surveillance of AFM is less than two years old, it remains unclear if some of this year, some doctors on a wheelchair infection with intraising concerns that the cause of some of the disease. The CDC's $3 billion science effort aims to rid myelium. The \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "At first, it seemed like 4-year-old Laura Carson was suffering from a simple headache. Then came rapid shallow breathing, a tremor, double vision. Within days in August 2014, she was \"a limp rag doll,\" reports Today\u2014but it took doctors some time to diagnose her with acute flaccid myelitis, a rare disease the CDC warns is becoming increasingly more common. Not much is known about the polio-like disease that plagues mostly children, including what causes it. What is known is that AFM affects the spinal cord and causes weak limbs or paralysis, drooping in the face, and slurred speech or difficulty breathing. About 200 kids have been diagnosed since 2014, and this year's figures are especially troubling. The CDC reports 121 cases of AFM were confirmed in 2014, but that was followed by just 21 cases in 2015, reports Fox News. From January to August of this year, however, there were 50 confirmed cases in 24 states. Among that first spike of cases in 2014, the Washington Post reports that 85% of kids recovered partially, but only three recovered fully. A CDC study found 68% of patients had a fever and 81% had a respiratory illness before AFM symptoms appeared. Some had been diagnosed with the West Nile virus, and others with an enterovirus. \"August to October is typically when enteroviruses circulate\" and \"we see more acute flaccid myelitis during that season,\" a doctor tells NBC News. Washing your hands and covering your mouth when coughing or sneezing are among the ways suggested to help. (Four siblings suffer from a mysterious disease.)"
+    ],
+    "score": 0.24626865671641787,
+    "metrics": {
+      "peak_memory_gb": 18.3432,
+      "kv_cache_mb": 2416.4434,
+      "ttft_ms": 301.5304,
+      "total_time_s": 8.1129,
+      "decode_time_s": 7.8113,
+      "throughput_tps": 65.5462,
+      "per_token_latency_ms": 15.2564
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nThe Shroud of Turin, a centuries-old linen cloth bearing the image of a crucified man, has been the subject of intense scientific scrutiny and debate. Recently, a team of researchers conducted a forensic analysis of the bloodstain patterns on the shroud, using real and synthetic blood samples to test the orientation of stains on the cloth. The investigation found that the bloodstains are inconsistent with any one pose, suggesting that a standing model was used to imprint the patterns at different angles for the hands, chest, and back. This contradicts the idea that the shroud is a genuine death shroud of a crucified person, as the bloodstains should be consistent with the body's position during crucifixion. The researchers also found that the angle at which gravity pulls blood dripping from a body on the shroud varies with the body part, which is not consistent with the way blood would flow from a person hanging on a cross. These findings add to the evidence that the shroud is a medieval fraud. The Vatican regards the shroud as an icon, rather than a religious relic, and has never officially rejected it. However, the latest scientific evidence suggests that the shroud is not a genuine burial cloth of Jesus, but rather a medieval creation intended to deceive.",
+    "answers": [
+      "The Shroud of Turin is supposedly the burial cloth that was wrapped around Jesus after his crucifixion; bloodstains on the linen shroud, which are said to have been transferred to it during the three days Jesus was in the tomb, form the image of a crucified man. But a new study reported in the Journal of Forensic Sciences finds the bloodstain image was likely faked. Researchers looking at the blood spatter found that the stains appeared to come from someone standing up, rather than someone who was flat on the fabric, Science Alert reports. As the researchers put it, the stains are \"totally unrealistic\" when compared to what they should look like. The shroud, which is held in the Cathedral of St. John the Baptist in Italy, is considered an icon, as opposed to a genuine religious relic, by the Vatican; Fox News notes \"the church has never weighed in on its authenticity.\" \"This is the kind of forensic work done all the time in police investigations,\" the forensic scientist who conducted the analysis tells BuzzFeed News. \"Even a crucified or hanging person should leave a distinct blood pattern on the cloth, which would be fascinating information to have.\" The study found inconsistent staining, with researchers concluding multiple poses were used to create the bloodstains\u2014a standing model was likely used to imprint patterns on the cloth at various angles for various body parts. Another bloodstain pattern expert notes that more research could be done to see whether cleaning a body or preparing it for burial might account for the inconsistent staining, though he notes that the stains do appear to have come from flowing blood, meaning a heart that was beating at the time the stains were made. (See previous stories in the real-or-fake debate here.)"
+    ],
+    "score": 0.3708609271523179,
+    "metrics": {
+      "peak_memory_gb": 17.2767,
+      "kv_cache_mb": 1883.2425,
+      "ttft_ms": 295.7364,
+      "total_time_s": 4.5547,
+      "decode_time_s": 4.2589,
+      "throughput_tps": 68.7973,
+      "per_token_latency_ms": 14.5355
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nPresident Trump met with North Korean leader Kim Jong Un in Singapore and made a bold proposal to Kim. Trump suggested that North Korea could become a major tourist destination and earn billions of dollars by developing its untapped property market potential. He also showed Kim a video simulation of possible projects that could take place in the rogue nation. Despite some initial confusion, Trump expressed optimism that Kim was interested in the ideas presented to him. In related news, the Internet Archive is working to fix all broken links on the web by crawling supported \"No More 404\" sites and archiving pages as they are created. Additionally, President Trump offered North Korea leader Kim Jong Un a rare glimpse inside the presidential limousine known as \"The Beast\" during their summit in Singapore.",
+    "answers": [
+      "You can temporarily take Donald Trump out of real estate, but you can't take the real estate out of Donald Trump. That much was clear at a Singapore press conference Tuesday, which took place after the president's meeting with Kim Jong Un and in which he touched upon the potential of North Korea's coastline. \"They have great beaches,\" Trump noted, per the Washington Examiner. \"You see that whenever they're exploding their cannons into the ocean.\" And that spectacular view got him to thinking: \"Wouldn't that make a great condo? Instead of doing that you could have the best hotels in the world right there. Think of it from a real estate perspective, you have South Korea, you have China, and they own the land in the middle, how bad is that, right? It's great.\" The AP also reports on another post-summit activity, which it deems a \"classic alpha male move\": Trump showing off \"The Beast,\" the presidential limousine, to the North Korean leader. CNN shows a video clip of the two men approaching the limo, a Secret Service agent opening the door, and Kim peering in to take a look. \"We know that these men were trying to find ways to bond, in just like a personal, human way, and what's more natural for guys [than] to want to check out one another's car,\" Chris Cuomo notes. (Here are seven complimentary things Trump said about Kim after the summit.)"
+    ],
+    "score": 0.22556390977443608,
+    "metrics": {
+      "peak_memory_gb": 14.6727,
+      "kv_cache_mb": 580.9111,
+      "ttft_ms": 141.6267,
+      "total_time_s": 2.43,
+      "decode_time_s": 2.2883,
+      "throughput_tps": 73.855,
+      "per_token_latency_ms": 13.54
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\nPresident Obama has signed a bill that authorizes the prestigious Congressional Gold Medal to be awarded to over 6,000 Japanese-American veterans who served in World War II. These veterans, known as Nisei, were born to immigrant parents and fought in battles in Europe and Asia despite being kept in detention camps by the US government due to their ethnicity. The 442nd Regimental Combat Team, made up of Americans of Japanese ancestry who volunteered to fight, is the most decorated Army unit of its size and length of service in the history of the United States. The Military Intelligence Service provided valuable language and cultural knowledge to the US during the war. The Congressional Gold Medal is one of the highest civilian honors presented to people who serve the security and national interests of the United States, and past honorees include the Wright Brothers, Rosa Parks, Navajo Code Talkers, the Tuskegee Airmen, and the Dalai Lama.",
+    "answers": [
+      "President Obama today signed legislation to honor Japanese-American soldiers who fought on behalf of the Allies during World War II\u2014even as some of their families were kept in confinement in the US. This long-awaited bill will open the door for more than 6,000 soldiers known as Nisei veterans to collectively receive the prestigious Congressional Gold Medal. For more on the vets, see the Digital Journal or Oregon Public Broadcasting."
+    ],
+    "score": 0.2787878787878788,
+    "metrics": {
+      "peak_memory_gb": 15.6881,
+      "kv_cache_mb": 1088.9462,
+      "ttft_ms": 119.3044,
+      "total_time_s": 3.1291,
+      "decode_time_s": 3.0097,
+      "throughput_tps": 73.7605,
+      "per_token_latency_ms": 13.5574
+    }
+  },
+  {
+    "task": "multi_news",
+    "method": "baseline",
+    "config": {},
+    "pred": "\n\nIn the latest news, US President Donald Trump has come under fire for his controversial statements on various issues. In a recent interview, Trump claimed that he doesn't have to disclose trusts for his family that he said were worth more than $2 billion, which is more than what he personally invested in his firm, WL Ross & Co. According to Forbes, Trump's net worth is $3.4 billion, which is more than what he claimed. Trump also claimed that he had invested $3 million in his firm, which is more than what he actually invested. Trump also stated that he had to clarify the situation, but he did not. \n\nIn another news, Trump's commerce secretary Wilbur Ross has been accused of lying about his assets, which are more than $2 billion in assets, which is more than $3.7 billion in environmental liabilities, according to people who worked at the Commerce Department. Trump also stated that he year earlier in October, according to President George W. Trump also claimed that he had invested in the Commerce secretary Wilbur Ross' questionable statements on various issues, including Trump's controversial statements on various issues, including Trump's statements on the situation, according to Trump's statements on the situation, according to situation, according to situation, according to situation, according to situation, Trump's statements on situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation, according to situation",
+    "answers": [
+      "Earlier this year, President Trump noted \"I just don't want a poor person\" in charge of economic posts in his administration, then touted Commerce Secretary Wilbur Ross as \"a very rich person\" who was up to the task. But just how rich Ross really is is now up in the air, Forbes reports, noting it's yanked Ross off its billionaires list after a one-month probe revealed that $2 billion or so or Ross' alleged fortune \"never existed,\" and that Ross had engaged in an \"apparent sequence of fibs, exaggerations, omissions, fabrications, and whoppers\" with the magazine going back 13 years. The discovery came when Ross, 79, contacted Forbes in October to refute his ranking: Last year he was listed with a net worth of $2.9 billion on the Forbes 400; he claimed he was worth closer to $3.7 billion. Then Forbes talked with 10 of Ross' ex-employees at his private equity firm, who noted a \"penchant for misleading\" that affected fellow workers and investors and spurred big fines, suits, and refunds to backers. \"Wilbur doesn't have an issue with bending the truth,\" one longtime colleague says, while another is more blunt: \"He's lied to a lot of people.\" The magazine delves into Ross' back story, including how, when he first made the Forbes billionaires list in 2004 with a net worth of $1 billion, \"everyone that I knew that worked with Wilbur knew it wasn't true,\" per a former colleague. When Forbes told Ross he was being removed from its billionaires club, Ross retorted the magazine wasn't counting family trusts that he wasn't obligated to inform the feds about\u2014in the amount of \"more than $2 billion,\" assets Ross said he put into the trusts sometime \"between the election and [my] nomination.\" When Forbes asked to see a paper trail proving that, Ross cited \"privacy issues\"\u2014and the magazine lays out other problems with Ross' story on the supposed $2 billion transfer. Read the in-depth findings here."
+    ],
+    "score": 0.2574257425742575,
+    "metrics": {
+      "peak_memory_gb": 18.3421,
+      "kv_cache_mb": 2415.9191,
+      "ttft_ms": 352.8766,
+      "total_time_s": 8.0367,
+      "decode_time_s": 7.6837,
+      "throughput_tps": 66.6343,
+      "per_token_latency_ms": 15.0073
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\t\tGump g = (Gump)m_Participants[i].m_Gump;\n\t\t\t\tif ( g is DuelContextGump )\n\t\t\t\t{\n\t\t\t\t\tDuelContextGump dcg = (Duel",
+    "answers": [
+      "\t\t\t\tParticipant p = (Participant)m_Participants[i];"
+    ],
+    "score": 0.125,
+    "metrics": {
+      "peak_memory_gb": 17.8723,
+      "kv_cache_mb": 2181.0381,
+      "ttft_ms": 233.2724,
+      "total_time_s": 1.2017,
+      "decode_time_s": 0.9683,
+      "throughput_tps": 66.0947,
+      "per_token_latency_ms": 15.1298
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\tZ_.add_edge(e_v, e_u, **data.copy())\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t\t\t\n\t",
+    "answers": [
+      "\t\t\tZ_.add_edge(e_u, e_v, **data.copy())"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.7879,
+      "kv_cache_mb": 2130.1821,
+      "ttft_ms": 164.9746,
+      "total_time_s": 1.1101,
+      "decode_time_s": 0.945,
+      "throughput_tps": 67.7241,
+      "per_token_latency_ms": 14.7658
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       a = Sndfile(ofilename, 'r')\n        # Now, read some frames, go back, and compare buffers\n        # (check whence == 1 == SEEK_CUR)\n        a.read_frames(1024)\n        a.",
+    "answers": [
+      "        rfd, fd, cfilename   = open_tmp_file('rwseektest.wav')"
+    ],
+    "score": 0.07407407407407407,
+    "metrics": {
+      "peak_memory_gb": 16.5417,
+      "kv_cache_mb": 1515.7166,
+      "ttft_ms": 128.2088,
+      "total_time_s": 1.0082,
+      "decode_time_s": 0.8799,
+      "throughput_tps": 72.7347,
+      "per_token_latency_ms": 13.7486
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "   unisubs_page = VideoPage(\"https://www.unisubs.com/videos/123456789\")\n    unisubs_page.open_video_page(\"123456789\")\n    print unisubs_",
+    "answers": [
+      "            if e.text == language:"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 16.1841,
+      "kv_cache_mb": 1331.6915,
+      "ttft_ms": 134.8577,
+      "total_time_s": 1.0044,
+      "decode_time_s": 0.8694,
+      "throughput_tps": 73.6141,
+      "per_token_latency_ms": 13.5843
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\t\t\tOLStyleValue styleValue = (OLStyleValue) value;\n\t\t\t\t\twriter.addAttribute(\"name\", styleValue.getName());\n\t\t\t\t\twriter.addAttribute(\"value\", styleValue.getValue());\n\t\t\t\t}\n\t\t\t",
+    "answers": [
+      "\t\t\t\t\tOLStyleValue styleValue = (OLStyleValue) value;"
+    ],
+    "score": 0.4,
+    "metrics": {
+      "peak_memory_gb": 16.9687,
+      "kv_cache_mb": 1698.1688,
+      "ttft_ms": 150.2297,
+      "total_time_s": 1.0459,
+      "decode_time_s": 0.8956,
+      "throughput_tps": 71.4605,
+      "per_token_latency_ms": 13.9938
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       for a in self.answers:\n            ret += a + \" \"\n        return ret\nclass _AnswerData(_QAData):\n    def __init__(self, question, answer):\n        super(_AnswerData).__init__(question, answer\n\n    def ask_string(",
+    "answers": [
+      "        longest = max(self.answers)"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8723,
+      "kv_cache_mb": 2181.0381,
+      "ttft_ms": 149.6717,
+      "total_time_s": 1.1142,
+      "decode_time_s": 0.9644,
+      "throughput_tps": 66.3594,
+      "per_token_latency_ms": 15.0695
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "                   mob.Prompt = new SR_NewRunePrompt(RuneAcc, mob.Location, mob.Map);\n                    Send(mob, SR_Utilities.FetchInfo(mob.Account));\n                    break;\n                case 3:\n                    mob",
+    "answers": [
+      "                    mob.Target = new SR_NewRuneTarget(RuneAcc);"
+    ],
+    "score": 0.23529411764705882,
+    "metrics": {
+      "peak_memory_gb": 17.0177,
+      "kv_cache_mb": 1753.7434,
+      "ttft_ms": 141.4159,
+      "total_time_s": 1.0828,
+      "decode_time_s": 0.9413,
+      "throughput_tps": 67.9931,
+      "per_token_latency_ms": 14.7074
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "           for (X509Certificate cert : chain) {\n                s.println(\"Certificate: \");\n                cert.print(s);\n                s.println();\n            }\n        }\n    }\n}\n\n}\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "            for (int i = 0; i < chain.length; i++)"
+    ],
+    "score": 0.09999999999999999,
+    "metrics": {
+      "peak_memory_gb": 17.8713,
+      "kv_cache_mb": 2180.5138,
+      "ttft_ms": 198.9565,
+      "total_time_s": 1.1953,
+      "decode_time_s": 0.9962,
+      "throughput_tps": 64.241,
+      "per_token_latency_ms": 15.5664
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "           sp = new JESpace (name, path);\n            spaceRegistrar.put (name, sp);\n        }\n        return sp;\n    }\n    public synchronized static void removeSpace (String name) {\n        spaceRegistrar.remove (name);\n    }",
+    "answers": [
+      "            sp = new JESpace(name, path);"
+    ],
+    "score": 0.22222222222222224,
+    "metrics": {
+      "peak_memory_gb": 16.72,
+      "kv_cache_mb": 1599.0784,
+      "ttft_ms": 143.78,
+      "total_time_s": 1.0489,
+      "decode_time_s": 0.905,
+      "throughput_tps": 70.7145,
+      "per_token_latency_ms": 14.1414
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\t\t\tpos = btnEnergizeAll.bottom();\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t\t\n\t\t@Override\n\t\tpublic void onBack() {\n\t\t\tsuper.onBack();\n\t\t\tif (owner",
+    "answers": [
+      "\t\t\t\t\tpos = btnEnergizeAll.bottom();"
+    ],
+    "score": 0.13333333333333333,
+    "metrics": {
+      "peak_memory_gb": 16.4368,
+      "kv_cache_mb": 1450.1806,
+      "ttft_ms": 195.4275,
+      "total_time_s": 1.1141,
+      "decode_time_s": 0.9186,
+      "throughput_tps": 69.6705,
+      "per_token_latency_ms": 14.3533
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       request = self.read_request(environ)\n        soap_action = environ.get('SOAPAction', None)\n        if soap_action:\n            start_response('200 OK', [('Content-Type', 'text/xml'), ('Content-Length', str(len",
+    "answers": [
+      "        length = int(environ['CONTENT_LENGTH'])"
+    ],
+    "score": 0.11111111111111112,
+    "metrics": {
+      "peak_memory_gb": 17.8765,
+      "kv_cache_mb": 2181.5624,
+      "ttft_ms": 232.6222,
+      "total_time_s": 1.2143,
+      "decode_time_s": 0.9816,
+      "throughput_tps": 65.2013,
+      "per_token_latency_ms": 15.3371
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       mark = \"setRepeated('%s');\" % status_id\n        self.webview.execute_javascript(mark)\n    def unmark_status_as_repeated(self, status_id):\n        mark = \"unsetRepeated('%s');",
+    "answers": [
+      "        mark = \"setRepeated('%s');\" % status_id"
+    ],
+    "score": 0.37499999999999994,
+    "metrics": {
+      "peak_memory_gb": 17.088,
+      "kv_cache_mb": 1788.8707,
+      "ttft_ms": 157.5196,
+      "total_time_s": 1.082,
+      "decode_time_s": 0.9243,
+      "throughput_tps": 69.238,
+      "per_token_latency_ms": 14.4429
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "           return {\"error\": False}\n        except Exception as e:\n            result = {\n                \"error\": True,\n                \"message\": str(e),\n                \"traceback\": traceback.format_exc()\n            }\n            return result\n    def run_subprocess(",
+    "answers": [
+      "            return {\"error\": False}"
+    ],
+    "score": 0.17391304347826086,
+    "metrics": {
+      "peak_memory_gb": 17.8723,
+      "kv_cache_mb": 2181.0381,
+      "ttft_ms": 152.7914,
+      "total_time_s": 1.1097,
+      "decode_time_s": 0.9568,
+      "throughput_tps": 66.8877,
+      "per_token_latency_ms": 14.9504
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\tZoneIdentityPermission z = (ZoneIdentityPermission) a.Union (b);\n\t\t\tAssert.IsTrue (Same (a, z), \"Trusted+Untrusted\");\n\t\t\tAssert.IsFalse (Object.ReferenceEquals (a, z), \"!Reference",
+    "answers": [
+      "\t\t\tIPermission result = a.Union (b);"
+    ],
+    "score": 0.21052631578947364,
+    "metrics": {
+      "peak_memory_gb": 16.4342,
+      "kv_cache_mb": 1447.5592,
+      "ttft_ms": 156.6573,
+      "total_time_s": 1.1188,
+      "decode_time_s": 0.9621,
+      "throughput_tps": 66.5239,
+      "per_token_latency_ms": 15.0322
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "   context = _get_ssl_context(keyfile, certfile, ca_certs)\n    # ...\n    connection = ssl.create_connection((\"www.example.com\", 443), context=context)\n    # ...\n    with open(keyfile, \"",
+    "answers": [
+      "        certs = []"
+    ],
+    "score": 0.11111111111111112,
+    "metrics": {
+      "peak_memory_gb": 16.4704,
+      "kv_cache_mb": 1480.065,
+      "ttft_ms": 133.9593,
+      "total_time_s": 1.0698,
+      "decode_time_s": 0.9357,
+      "throughput_tps": 68.3961,
+      "per_token_latency_ms": 14.6207
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       DomainInfo domainInfo = manager.getDomainInfo(domain);\n        request.setAttribute(\"domainInfo\", domainInfo);\n    }\n}\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+    "answers": [
+      "        User user = getUser(request);"
+    ],
+    "score": 0.2,
+    "metrics": {
+      "peak_memory_gb": 16.3246,
+      "kv_cache_mb": 1407.189,
+      "ttft_ms": 168.0798,
+      "total_time_s": 1.05,
+      "decode_time_s": 0.8818,
+      "throughput_tps": 72.5752,
+      "per_token_latency_ms": 13.7788
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "```\n    async def __play_audio(self) -> None:\n        # ...\n        await self.__player.play()\n        # ...\n```\nThe code above is a simplified version of the original code, which is quite long and complex. The code above is meant to demonstrate the basic structure",
+    "answers": [
+      "            self.__tmp_dir, 'datastream.%s.pipe' % uuid.uuid4().hex)"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.8723,
+      "kv_cache_mb": 2181.0381,
+      "ttft_ms": 237.2271,
+      "total_time_s": 1.3267,
+      "decode_time_s": 1.0893,
+      "throughput_tps": 58.7511,
+      "per_token_latency_ms": 17.021
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\t\tif (option1) {\n\t\t\t\t\tjumpID = (int) store.GetValue (iter, columnOther);\n\t\t\t\t\t//don't catch 0 value\n\t\t\t\t\twhile ( store.IterNext(ref iter) ){",
+    "answers": [
+      "\t\t\t\tif(! option1) {"
+    ],
+    "score": 0.0,
+    "metrics": {
+      "peak_memory_gb": 17.2243,
+      "kv_cache_mb": 1835.008,
+      "ttft_ms": 200.5649,
+      "total_time_s": 1.1357,
+      "decode_time_s": 0.935,
+      "throughput_tps": 68.4462,
+      "per_token_latency_ms": 14.61
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "       String[] argValues = new String[args.length];\n        for (int i = 0; i < args.length; i++) {\n            if (args[i] == null) {\n                argValues[i] = \"\";\n            } else {\n                argValues[i",
+    "answers": [
+      "        if ((args == null) || (args.length == 0)) {"
+    ],
+    "score": 0.1935483870967742,
+    "metrics": {
+      "peak_memory_gb": 17.8105,
+      "kv_cache_mb": 2150.1051,
+      "ttft_ms": 174.721,
+      "total_time_s": 1.1724,
+      "decode_time_s": 0.9976,
+      "throughput_tps": 64.1539,
+      "per_token_latency_ms": 15.5875
+    }
+  },
+  {
+    "task": "lcc",
+    "method": "baseline",
+    "config": {},
+    "pred": "\t\t\t\tfirms = loadFromFile();\n\t\t\t}\n\t\t}), TIMED(new ConfigFile<UUID, TimedData>()\n\t\t{\n\t\t\t@Override\n\t\t\tpublic TimedData create(UUID id, ConfigurationSection conf)\n",
+    "answers": [
+      "\t\t\t\tfirms = loadFromFile();"
+    ],
+    "score": 0.10526315789473684,
+    "metrics": {
+      "peak_memory_gb": 15.8722,
+      "kv_cache_mb": 1153.9579,
+      "ttft_ms": 134.9728,
+      "total_time_s": 1.0483,
+      "decode_time_s": 0.9132,
+      "throughput_tps": 70.0822,
+      "per_token_latency_ms": 14.269
+    }
+  }
+]

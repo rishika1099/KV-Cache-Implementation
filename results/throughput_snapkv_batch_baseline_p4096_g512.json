@@ -1,0 +1,44 @@
+{
+  "method": "baseline",
+  "prefill_len": 4096,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-chat-hf",
+  "snapkv_config": null,
+  "results": {
+    "1": {
+      "oom": false,
+      "mean_ttft_ms": 137.6973659999976,
+      "mean_decode_tps": 54.739273961674684,
+      "mean_total_tps": 54.04906470467117,
+      "mean_peak_mem_gb": 18.341270528,
+      "n_stable": 2
+    },
+    "2": {
+      "oom": false,
+      "mean_ttft_ms": 277.17898850000466,
+      "mean_decode_tps": 98.13471116173594,
+      "mean_total_tps": 95.77751109235997,
+      "mean_peak_mem_gb": 23.172104704,
+      "n_stable": 2
+    },
+    "4": {
+      "oom": false,
+      "mean_ttft_ms": 536.6253584999968,
+      "mean_decode_tps": 129.03897819067305,
+      "mean_total_tps": 125.05488893985654,
+      "mean_peak_mem_gb": 32.833773056,
+      "n_stable": 2
+    },
+    "8": {
+      "oom": false,
+      "mean_ttft_ms": 1095.287466000002,
+      "mean_decode_tps": 155.45186994097742,
+      "mean_total_tps": 149.5279877684752,
+      "mean_peak_mem_gb": 52.15710976,
+      "n_stable": 2
+    },
+    "16": {
+      "oom": true
+    }
+  }
+}
