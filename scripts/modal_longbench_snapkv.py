@@ -1,17 +1,18 @@
 """
-modal_longbench.py
+modal_longbench_snapkv.py
 
-Run LongBench for a single method. Trigger each variant independently.
+LongBench quality evaluation for SnapKV (budget_ratio=0.4) vs baseline.
+6 tasks × 20 examples = 120 examples per method.
 
-Examples:
-    modal run modal_longbench.py                          # baseline
-    modal run modal_longbench.py --method kivi --bits 4
-    modal run modal_longbench.py --method kivi --bits 2
-    modal run modal_longbench.py --method kivi --bits 2 --residual_length 64
-    modal run modal_longbench.py --method topk --top_k 2048
-    modal run modal_longbench.py --method topk --top_k 1024 --n_local 512
-    modal run modal_longbench.py --tasks qasper,triviaqa
-    modal run modal_longbench.py --n_per_task 10
+Tasks: qasper, multifieldqa_en, triviaqa, 2wikimqa, multi_news, lcc
+
+Run:
+    modal run modal_longbench_snapkv.py                     # baseline
+    modal run modal_longbench_snapkv.py --method snapkv     # SnapKV 0.4
+
+Output JSON:
+    results/longbench_snapkv_baseline.json
+    results/longbench_snapkv_snapkv_0.4.json
 """
 
 import json
@@ -20,8 +21,7 @@ from pathlib import Path
 
 import modal
 
-app = modal.App("kv-longbench")
-
+app   = modal.App("kv-longbench-snapkv")
 _base = Path(__file__).parent
 
 image = (
@@ -44,10 +44,9 @@ HF_CACHE_PATH   = Path("/root/.cache/huggingface")
 RESULTS_PATH    = Path("/results")
 
 HF_DATASET = "vm2825/longbench-raw"
-MAX_LENGTH = 4096   # KIVI config/model2maxlen.json — Llama-2-7b-chat-hf
-ALL_TASKS  = ["qasper", "multifieldqa_en", "triviaqa", "2wikimqa", "multi_news", "lcc"]
+MAX_LENGTH  = 4096
+ALL_TASKS   = ["qasper", "multifieldqa_en", "triviaqa", "2wikimqa", "multi_news", "lcc"]
 
-# Task-specific prompt templates (from KIVI / LongBench official)
 DATASET2PROMPT = {
     "qasper":           "You are given a scientific article and a question. Answer the question as concisely as you can, using a single phrase or sentence if possible. If the question cannot be answered based on the information in the article, write \"unanswerable\". If the question is a yes/no question, answer \"yes\", \"no\", or \"unanswerable\". Do not provide any explanation.\n\nArticle: {context}\n\n Answer the question based on the above article as concisely as you can, using a single phrase or sentence if possible. If the question cannot be answered based on the information in the article, write \"unanswerable\". If the question is a yes/no question, answer \"yes\", \"no\", or \"unanswerable\". Do not provide any explanation.\n\nQuestion: {input}\n\nAnswer:",
     "multifieldqa_en":  "Read the following text and answer briefly.\n\n{context}\n\nNow, answer the following question based on the above text, only give me the answer and do not output any other words.\n\nQuestion: {input}\nAnswer:",
@@ -57,7 +56,6 @@ DATASET2PROMPT = {
     "lcc":              "Please complete the code given below. \n{context}Next line of code:\n",
 }
 
-# Task-specific max new tokens (from KIVI / LongBench official)
 DATASET2MAXLEN = {
     "qasper":           128,
     "multifieldqa_en":  64,
@@ -74,9 +72,7 @@ def _bootstrap():
 
 
 def _set_seeds(seed=42):
-    import random
-    import numpy as np
-    import torch
+    import random, numpy as np, torch
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -100,7 +96,6 @@ def run_longbench(
     model_name: str,
     task_list: list,
     n_per_task: int,
-    max_new_tokens: int = 200,
     seed: int = 42,
 ) -> list:
     _bootstrap()
@@ -110,168 +105,159 @@ def run_longbench(
     from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from methods.baseline       import BaselineMethod
-    from methods.kivi_quant     import KIVIMethod
-    from methods.topk_selection import TopKMethod
+    from methods.snapkv_eviction import SnapKVMethod
     from benchmark.runner       import generate_with_method
     from benchmark.datasets     import DatasetLoader
 
-    print(f"[modal] Loading {model_name}...")
+    print(f"[modal] Loading {model_name}  method={method_name}  cfg={method_cfg}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.float16, device_map="cuda"
+        model_name, torch_dtype=torch.float16, device_map="cuda",
     )
     model.eval()
+    print(f"[modal] Model loaded. Mem={torch.cuda.memory_allocated()/1e9:.1f} GB")
 
     if method_name == "baseline":
         method = BaselineMethod()
-    elif method_name == "kivi":
-        method = KIVIMethod(
-            bits=method_cfg.get("bits", 4),
-            residual_length=method_cfg.get("residual_length", 128),
-            group_size=method_cfg.get("group_size", 32),
-        )
-    elif method_name == "topk":
-        method = TopKMethod(
-            K=method_cfg.get("K", 2048),
-            n_sink=method_cfg.get("n_sink", 128),
-            n_local=method_cfg.get("n_local", 512),
-            cosine_threshold=method_cfg.get("cosine_threshold", 0.9),
-            kernel_size=method_cfg.get("kernel_size", -1),
+    elif method_name == "snapkv":
+        method = SnapKVMethod(
+            budget_ratio=method_cfg.get("budget_ratio", 0.4),
+            observation_window=method_cfg.get("observation_window", 32),
+            kernel_size=method_cfg.get("kernel_size", 7),
+            sink_size=method_cfg.get("sink_size", 0),
+            pooling=method_cfg.get("pooling", "avgpool"),
         )
     else:
         raise ValueError(f"Unknown method: {method_name}")
 
-    cfg_str = json.dumps(method_cfg, sort_keys=True)
-    results = []
-
-    # Load dataset examples and prepare prompts inside Modal.
+    # Build prompts
     all_examples = []
     for task in task_list:
         print(f"  Loading {task}...")
         ds = load_dataset(HF_DATASET, task, split="test")
-        template = DATASET2PROMPT[task]
-        task_max_tokens = DATASET2MAXLEN[task]
-        truncated = 0
-        count = 0
-
+        template    = DATASET2PROMPT[task]
+        task_max_nl = DATASET2MAXLEN[task]
+        truncated   = 0
+        count       = 0
         for ex in ds:
             if count >= n_per_task:
                 break
-
             answers = ex.get("answers", [""])
             if not isinstance(answers, list):
                 answers = [str(answers)]
-
             prompt = template.format(**ex)
             tokens = tokenizer(prompt, truncation=False).input_ids
             if len(tokens) > MAX_LENGTH:
                 half = MAX_LENGTH // 2
                 prompt = (
-                    tokenizer.decode(tokens[:half], skip_special_tokens=True) +
+                    tokenizer.decode(tokens[:half],  skip_special_tokens=True) +
                     tokenizer.decode(tokens[-half:], skip_special_tokens=True)
                 )
                 truncated += 1
-
             all_examples.append({
-                "task": task,
-                "prompt": prompt,
-                "answers": answers,
-                "max_new_tokens": task_max_tokens,
+                "task": task, "prompt": prompt,
+                "answers": answers, "max_new_tokens": task_max_nl,
             })
             count += 1
+        print(f"    {count} examples  ({truncated} truncated to {MAX_LENGTH} tok)")
 
-        print(f"    {count} examples  ({truncated} middle-truncated to {MAX_LENGTH} tokens)")
-
+    results = []
     for ex in all_examples:
         task           = ex["task"]
-        prompt         = ex["prompt"]
-        answers        = ex["answers"]
-        task_max_tokens = ex.get("max_new_tokens", max_new_tokens)
+        task_max_nl    = ex["max_new_tokens"]
         _set_seeds(seed)
         try:
-            pred, _ = generate_with_method(
+            pred, metrics = generate_with_method(
                 model, tokenizer, method,
-                prompt=prompt,
-                max_new_tokens=task_max_tokens,
+                prompt=ex["prompt"],
+                max_new_tokens=task_max_nl,
                 device="cuda",
             )
-            score = DatasetLoader.score_longbench(task, [pred], [answers])
+            score = DatasetLoader.score_longbench(task, [pred], [ex["answers"]])
             results.append({
-                "task": task, "method": method_name,
-                "config": method_cfg, "prompt": prompt,
-                "pred": pred, "answers": answers, "score": score,
+                "task":    task,
+                "method":  method_name,
+                "config":  method_cfg,
+                "pred":    pred,
+                "answers": ex["answers"],
+                "score":   score,
+                "metrics": {k: round(v, 4) for k, v in metrics.items()
+                            if isinstance(v, float)},
             })
-            print(f"  {method_name:10s} {cfg_str} | {task:20s} | score={score:.3f}")
+            print(f"  {method_name:10s} | {task:20s} | score={score:.3f}  "
+                  f"kv={metrics.get('kv_cache_mb', 0):.0f}MB  "
+                  f"ttft={metrics.get('ttft_ms', 0):.0f}ms")
         except Exception as e:
             import traceback
-            print(f"  [ERROR] {method_name} {task}: {e}\n{traceback.format_exc()}")
+            print(f"  [ERROR] {task}: {e}\n{traceback.format_exc()}")
             results.append({
-                "task": task, "method": method_name,
-                "config": method_cfg, "prompt": prompt,
-                "pred": "", "answers": answers, "score": 0.0,
+                "task": task, "method": method_name, "config": method_cfg,
+                "pred": "", "answers": ex["answers"], "score": 0.0,
             })
 
     # Save to volume
-    cfg_tag = method_name if not method_cfg else f"{method_name}_{'_'.join(str(v) for v in method_cfg.values())}"
-    out = RESULTS_PATH / f"longbench_{cfg_tag}.json"
+    ratio_tag = f"_{method_cfg.get('budget_ratio', 0.4)}" if method_name == "snapkv" else ""
+    tag = f"longbench_snapkv_{method_name}{ratio_tag}"
+    out = RESULTS_PATH / f"{tag}.json"
     RESULTS_PATH.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as f:
         json.dump(results, f, indent=2)
     results_vol.commit()
-    print(f"[modal] Results saved to volume: {out}")
-
+    print(f"[modal] Saved → {out}")
     return results
 
 
 @app.local_entrypoint()
 def main(
-    method: str = "baseline",
-    bits: int = 4,
-    residual_length: int = 128,
-    group_size: int = 32,
-    # TopK-specific knobs (ignored unless method=topk)
-    top_k: int = 2048,
-    n_sink: int = 128,
-    n_local: int = 512,
-    cosine_threshold: float = 0.9,
-    kernel_size: int = -1,
-    model: str = "meta-llama/Llama-2-7b-chat-hf",
-    tasks: str = "",
-    n_per_task: int = 20,
-    max_new_tokens: int = 200,
+    method: str          = "baseline",
+    budget_ratio: float  = 0.4,
+    observation_window: int = 32,
+    kernel_size: int     = 7,
+    sink_size: int       = 0,
+    pooling: str         = "avgpool",
+    model: str           = "meta-llama/Llama-2-7b-chat-hf",
+    tasks: str           = "",
+    n_per_task: int      = 20,
+    seed: int            = 42,
 ):
-    # Build method config
+    """
+    LongBench quality eval for SnapKV vs baseline.
+
+        modal run modal_longbench_snapkv.py                     # baseline
+        modal run modal_longbench_snapkv.py --method snapkv     # SnapKV 0.4
+    """
     if method == "baseline":
         method_cfg = {}
-    elif method == "kivi":
-        method_cfg = {"bits": bits, "residual_length": residual_length, "group_size": group_size}
-    elif method == "topk":
+    elif method == "snapkv":
         method_cfg = {
-            "K": top_k, "n_sink": n_sink, "n_local": n_local,
-            "cosine_threshold": cosine_threshold, "kernel_size": kernel_size,
+            "budget_ratio":       budget_ratio,
+            "observation_window": observation_window,
+            "kernel_size":        kernel_size,
+            "sink_size":          sink_size,
+            "pooling":            pooling,
         }
     else:
         raise ValueError(f"Unknown method: {method}")
 
     task_list = [t.strip() for t in tasks.split(",") if t.strip()] or ALL_TASKS
-    cfg_str = json.dumps(method_cfg, sort_keys=True)
-    print(f"Method: {method}  cfg={cfg_str}")
+    print(f"Method: {method}  cfg={method_cfg}")
     print(f"Tasks:  {task_list}  ({n_per_task} per task)")
     print(f"Model:  {model}")
-    print(f"\nLaunching container...")
 
     results = run_longbench.remote(
-        method, method_cfg, model, task_list, n_per_task, max_new_tokens,
+        method, method_cfg, model, task_list, n_per_task, seed,
     )
 
-    # Also save locally
-    out = Path(__file__).parent / "results" / f"longbench_{method}{'_'+cfg_str if method_cfg else ''}.json"
+    # Save locally
+    ratio_tag = f"_{budget_ratio}" if method == "snapkv" else ""
+    out = Path(__file__).parent / "results" / f"longbench_snapkv_{method}{ratio_tag}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as f:
         json.dump(results, f, indent=2)
-    print(f"Local results saved to {out}")
+    print(f"Saved to {out}")
 
     # Summary
     from collections import defaultdict
@@ -279,10 +265,11 @@ def main(
     for r in results:
         task_scores[r["task"]].append(r["score"])
 
-    print(f"\n── {method} {cfg_str} ───────────────────────────────────────────────")
+    print(f"\n── {method} {method_cfg} ─────────────────────────────────────────")
     for task in task_list:
-        vals = task_scores[task]
-        avg = sum(vals) / len(vals) if vals else float("nan")
-        print(f"  {task:<22}  score={avg:.3f}")
+        vals = task_scores.get(task, [])
+        avg  = sum(vals) / len(vals) if vals else float("nan")
+        print(f"  {task:<22}  score={avg:.3f}  (n={len(vals)})")
     all_vals = [s for v in task_scores.values() for s in v]
-    print(f"  {'overall':<22}  score={sum(all_vals)/len(all_vals):.3f}" if all_vals else "")
+    if all_vals:
+        print(f"  {'overall':<22}  score={sum(all_vals)/len(all_vals):.3f}")

@@ -1,0 +1,18 @@
+{
+  "method": "baseline",
+  "bits": 4,
+  "group_size": 32,
+  "residual_length": 128,
+  "topk_params": null,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-hf",
+  "records": {
+    "32768": {
+      "mean_ttft_ms": 1886.1856933333313,
+      "mean_decode_tps": 21.41491215612076,
+      "mean_decode_ms_per_tok": 46.69643733137639,
+      "mean_peak_mem_gb": 52.065694208,
+      "n_stable": 3
+    }
+  }
+}

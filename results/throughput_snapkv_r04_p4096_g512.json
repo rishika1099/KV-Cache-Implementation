@@ -1,0 +1,38 @@
+{
+  "method": "snapkv",
+  "budget_ratio": 0.4,
+  "observation_window": 32,
+  "kernel_size": 7,
+  "sink_size": 0,
+  "batch_size": 1,
+  "prefill_len": 4096,
+  "max_new_tokens": 512,
+  "model": "meta-llama/Llama-2-7b-chat-hf",
+  "summary": {
+    "mean_ttft_ms": 410.9139010000007,
+    "mean_decode_tps": 56.45715525569153,
+    "mean_total_tps": 54.110976632377685,
+    "mean_peak_mem_gb": 53.408825856,
+    "n_stable": 2
+  },
+  "raw_batches": [
+    {
+      "ttft_ms": 414.4350019999976,
+      "decode_tps": 60.2806340925893,
+      "total_tps": 57.58339151462118,
+      "peak_mem_gb": 53.408825856
+    },
+    {
+      "ttft_ms": 408.3118429999999,
+      "decode_tps": 57.282915296022736,
+      "total_tps": 54.88293465321965,
+      "peak_mem_gb": 53.408825856
+    },
+    {
+      "ttft_ms": 413.5159590000015,
+      "decode_tps": 55.631395215360335,
+      "total_tps": 53.33901861153572,
+      "peak_mem_gb": 53.408825856
+    }
+  ]
+}
