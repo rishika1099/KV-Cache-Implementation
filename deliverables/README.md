@@ -6,8 +6,7 @@ This folder contains the final-project artifacts uploaded to CourseWorks.
 |---|---|
 | `TeamKV_HPML_Final_Report.tex` | LaTeX source of the IEEE-format final report |
 | `TeamKV_HPML_Final_Report.pdf` | Compiled final report (≤ 6 main pages, IEEE conference format) |
-| `KV_Cache_Optimization_Presentation.pptx` | Final presentation deck (PowerPoint source) |
-| `KV_Cache_Optimization_Presentation.pdf` | Final presentation deck (PDF export) |
+| `TeamKV_Final_Presentation.pdf` | Final presentation deck (PDF export) |
 
 The same `.pdf` files are uploaded as CourseWorks attachments.
 
