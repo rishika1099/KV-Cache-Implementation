@@ -21,6 +21,9 @@
 - **Final report:** [`deliverables/TeamKV_HPML_Final_Report.pdf`](deliverables/TeamKV_HPML_Final_Report.pdf)
 - **Final presentation:** [`deliverables/KV_Cache_Optimization_Presentation.pdf`](deliverables/KV_Cache_Optimization_Presentation.pdf)
 - **Experiment-tracking dashboard:** [https://wandb.ai/rm4318-columbia-university/kv-cache-hpml](https://wandb.ai/rm4318-columbia-university/kv-cache-hpml)
+- **Companion blog post (bonus):** [https://rishikamamidibathula.substack.com/p/kv-cache-optimization](https://rishikamamidibathula.substack.com/p/kv-cache-optimization)
+
+The final report PDF and the presentation file are checked into the `deliverables/` folder of this repository **and** uploaded to CourseWorks.
 
 ---
 
@@ -47,17 +50,18 @@ Autoregressive LLM decoding is memory-bandwidth bound: every generated token req
 |---|---|---|---|---|---|---|
 | LongBench overall | 0.291 | **0.292 (+0.3%)** | 0.273 (−6.2%) | **0.292 (+0.4%)** | **0.295 (+0.3%)** | 0.081* (−65%) |
 | KV compression | 1× | ~4× | ~8× | None† | ~2.5× | **3.9×** |
-| Decode tok/s (B=1) | 70 | 30 (0.4×) | 27 (0.4×) | 43 (0.6×) | ~70 | **43 (1.3×)** |
+| Decode tok/s (B=1) | 70 | 30 (0.4×) | 27 (0.4×) | 43 (0.6×) | ~70 | **43 (1.3×)**‡ |
 | Best batch tput | 497 @ BS=32 | 873 @ BS=32 | **957 @ BS=32** | — | — | — |
 | Max BS before OOM | 32 | **128** | **128** | — | — | — |
 | Peak mem @ BS=32 | 65.0 GB | **27.8 GB** | **27.8 GB** | 65 GB | ~26 GB | — |
 
 † TopK does not reduce KV storage — only attention scope is sparse.  
-\* MLA baseline used 2048-token truncation vs. 4096 for other methods.
+\* MLA baseline used 2048-token truncation vs. 4096 for other methods.  
+‡ MLA decode speedup measured at gen=256; gen-length dependent.
 
 **Hardware:** 1× NVIDIA H100 80GB HBM3, CUDA 12.1, PyTorch 2.4.1, Ubuntu 22.04 (Modal)
 
-**Headline result:** KIVI 4-bit is a free lunch at high batch sizes — lossless quality (0.292 vs 0.291), 2.3× smaller KV cache, and 1.93× decode throughput at BS=32, with the maximum achievable throughput on this GPU increasing 3.1× (1,517 vs 497 tok/s) by extending the maximum batch size from 32 to 128.
+**Headline result:** KIVI 4-bit incurs no measurable LongBench quality drop (0.292 vs 0.291) while delivering 2.3× smaller KV cache and 1.93× decode throughput at BS=32. By extending the maximum serviceable batch size from 32 to 128, KIVI 2-bit raises the single-GPU peak throughput by 3.1× (1,517 vs 497 tok/s).
 
 ---
 
@@ -66,39 +70,42 @@ Autoregressive LLM decoding is memory-bandwidth bound: every generated token req
 ```
 .
 ├── README.md
+├── LICENSE                        # MIT
 ├── requirements.txt
-├── configs/                  # YAML configs for experiments
-├── deliverables/             # Final report PDF + presentation
-│   └── TeamKV_HPML_Final_Report.pdf
-├── scripts/                  # Modal launch scripts + run helpers
-│   ├── modal_longbench.py    # LongBench quality (baseline/KIVI/TopK)
-│   ├── modal_mla_benchmark.py
-│   ├── modal_throughput.py   # Throughput batch sweep (baseline/KIVI)
-│   ├── modal_topk_throughput.py
-│   ├── modal_mla_throughput.py
+├── configs/                       # YAML configs for experiments
+├── deliverables/                  # Final report PDF + presentation
+│   ├── TeamKV_HPML_Final_Report.pdf
+│   └── KV_Cache_Optimization_Presentation.pdf
+├── scripts/                       # Modal launch scripts + run helpers
+│   ├── modal_longbench.py         # LongBench quality (baseline/KIVI/TopK)
+│   ├── modal_longbench_snapkv.py  # LongBench quality (SnapKV)
+│   ├── modal_throughput.py        # Throughput batch sweep (baseline/KIVI)
+│   ├── modal_topk_throughput.py   # TopK throughput, incl. 32K
+│   ├── modal_mla_benchmark.py     # MLA quality
+│   ├── modal_mla_throughput.py    # MLA throughput
 │   └── ...
-├── methods/                  # KV cache method implementations
+├── methods/                       # KV cache method implementations
+│   ├── baseline.py
 │   ├── kivi_quant.py
 │   ├── llama_kivi_model.py
 │   ├── topk_selection.py
 │   ├── llama_topk_model.py
 │   ├── llama_topk_flash_model.py
-│   ├── llama_snapkv_model.py
 │   ├── snapkv_eviction.py
-│   ├── llama_kivi_topk_model.py
-│   ├── kivi_kernels/         # CUDA/Triton quantized-GEMV kernels
-│   └── transmla/             # Multi-head Latent Attention (TransMLA)
-├── benchmark/                # Harness: datasets, runner, metrics
-├── experiments/              # Experiment scripts (ablations, sweeps)
-├── tests/
-├── notebooks/                # Jupyter notebooks
+│   ├── llama_snapkv_model.py
+│   ├── kivi_topk_hybrid.py
+│   ├── kivi_kernels/              # CUDA/Triton quantized-GEMV kernels
+│   └── transmla/                  # Multi-head Latent Attention (TransMLA)
+├── benchmark/                     # Harness: datasets, runner, metrics
+├── experiments/                   # Experiment scripts (ablations, sweeps)
+├── tests/                         # Unit tests for SnapKV, KIVI quant
+├── notebooks/
 │   └── mla_chat_demo.ipynb
-├── results/                  # JSON result files + analysis markdown
+├── results/                       # JSON result files + analysis markdown
 │   ├── RESULTS.md
 │   ├── TOPK_RESULTS.md
 │   └── RESULTS_MLA.md
-└── docs/                     # RUN.md, SUMMARY.md
-    └── RUN.md
+└── docs/                          # RUN.md, SUMMARY.md
 ```
 
 ---
@@ -121,9 +128,8 @@ pip install -r requirements.txt
 
 ### B. Experiment Tracking Dashboard
 
-> **Dashboard:** [https://wandb.ai/rm4318-columbia-university/kv-cache-hpml](https://wandb.ai/rm4318-columbia-university/kv-cache-hpml)
->
-> *Platform:* Weights & Biases
+> **Dashboard:** [https://wandb.ai/rm4318-columbia-university/kv-cache-hpml](https://wandb.ai/rm4318-columbia-university/kv-cache-hpml)  
+> *Platform:* Weights & Biases — opens publicly without login.
 
 ### C. Dataset
 
@@ -132,20 +138,11 @@ LongBench is downloaded automatically by the benchmark harness (`benchmark/datas
 ### D. Reproduce Quality Results (LongBench)
 
 ```bash
-# Baseline
-modal run scripts/modal_longbench.py
-
-# KIVI (4-bit and 2-bit)
-modal run scripts/modal_longbench.py --method kivi --bits 4
-modal run scripts/modal_longbench.py --method kivi --bits 2
-
-# TopK sweep
-modal run scripts/modal_longbench.py --method topk --top-k 1024
-
-# SnapKV
-modal run scripts/modal_longbench_snapkv.py --budget-ratio 0.4
-
-# MLA
+modal run scripts/modal_longbench.py                             # Baseline
+modal run scripts/modal_longbench.py --method kivi --bits 4      # KIVI 4-bit
+modal run scripts/modal_longbench.py --method kivi --bits 2      # KIVI 2-bit
+modal run scripts/modal_longbench.py --method topk --top-k 1024  # TopK
+modal run scripts/modal_longbench_snapkv.py --budget-ratio 0.4   # SnapKV
 modal run scripts/modal_mla_benchmark.py --run-baseline --run-mla
 ```
 
@@ -164,7 +161,7 @@ modal run scripts/modal_topk_throughput.py --method topk_flash --prefill-len 327
 modal run scripts/modal_mla_throughput.py --compare
 ```
 
-See `docs/RUN.md` for full parameter reference.
+See `docs/RUN.md` for the full parameter reference.
 
 ### F. Quickstart: Reproduce Headline Result
 
@@ -178,20 +175,20 @@ modal run scripts/modal_throughput.py --method kivi
 
 # 3. KIVI 4-bit LongBench quality (~20 min on H100)
 modal run scripts/modal_longbench.py --method kivi --bits 4
-
-# Results written to results/ and logged to W&B
 ```
+
+Results are written to `results/` and logged to W&B.
 
 ---
 
 ## 6. Results and Observations
 
-- **KIVI 4-bit — free-lunch quantization:** Lossless LongBench quality (0.292 vs 0.291), 4× smaller KV cache, 1.93× decode throughput at BS=32, max batch size extended from 32 to 128 (3.1× peak throughput gain). Slower at BS=1 (0.4×) due to INT4 GEMV inefficiency vs FP16 GEMV on tensor cores.
-- **TopK K=1024 — lossless sparse attention:** Matches baseline quality (0.292) and beats it on triviaqa (+20%) by filtering noise tokens. Zero memory reduction (full cache retained). Per-step scoring overhead makes it slower at B=1; gains appear at >32K context where sparsity saves more than scoring costs.
-- **TopK-Flash — long-context efficiency:** Paged KV pool + flash-attn reduces 32K TTFT by 33% (2597→1761 ms) and memory by 19% (52→42 GB). Baseline OOMs at 64K; TopK-Flash handles it at 65.8 GB.
-- **SnapKV 0.4 — best overall quality:** LongBench 0.295 (+0.3%), ~2.5× KV reduction, zero per-step overhead. One-shot attention-vote eviction after prefill. Only degrades on qasper (−2 pt) where evidence spans outside the observation window.
-- **MLA — memory+latency win, quality needs retraining:** 3.9× KV reduction and 1.26–1.32× decode speedup at B=1. Quality collapses (−65%) because the checkpoint was calibrated at 256-token context; needs retraining at ≥4K context.
-- **KIVI×TopK hybrid (32K):** 51% memory reduction (25.8 vs 52.1 GB) with 36% decode slowdown — memory win but latency loss due to Q@K^T scoring all 32K tokens before selection.
+- **KIVI 4-bit — quantization with no quality cost:** Lossless LongBench quality (0.292 vs 0.291), 4× smaller KV cache, 1.93× decode throughput at BS=32, max batch size extended from 32 to 128 (3.1× peak throughput gain). Slower at BS=1 (0.4×) due to INT4 GEMV not mapping to tensor-core units.
+- **TopK K=1024 — sparse attention without storage savings:** Matches baseline overall quality (0.292) and beats it on triviaqa (+20%) by filtering distracting passages. Zero memory reduction (full FP16 cache retained). Per-step Q·Kᵀ scoring overhead makes it slower at B=1; gains appear at long context (32K+) where the saved attention work outweighs scoring cost.
+- **TopK-Flash — long-context allocation efficiency:** Paged KV pool (256-token pages) + flash-attn cuts 32K peak memory by 19% (52→42 GB) and enables 64K context (baseline OOMs; TopK-Flash succeeds at 65.8 GB). The dominant 32K win is memory headroom and capacity rather than TTFT.
+- **SnapKV 0.4 — best overall quality:** LongBench 0.295 (+0.3%), ~2.5× KV reduction, zero per-step decode overhead. One-shot attention-vote eviction after prefill. Only degrades on qasper (−2 pt) where evidence spans fall outside the 32-token observation window.
+- **MLA — memory and latency win, quality needs retraining:** 3.9× KV reduction and 1.26–1.32× decode speedup at B=1 (gen=256). Quality collapses (−65%) because the available checkpoint was calibrated at 256-token context with rank-8 latent; recovering quality requires retraining at ≥4K context.
+- **KIVI×TopK hybrid (32K):** 51% memory reduction (25.8 vs 52.1 GB) with a 36% decode slowdown — Q·Kᵀ scoring still runs over all 32K tokens before selection, and INT4 GEMV overhead compounds with selection cost. The hybrid demonstrates that orthogonal compression strategies can stack memory savings, but selection-cost reduction is needed for the latency win.
 
 ---
 
@@ -199,17 +196,24 @@ modal run scripts/modal_longbench.py --method kivi --bits 4
 
 ### AI Use Disclosure
 
-**Did your team use any AI tool?**
+*Per the HPML AI Use Policy.*
+
+**Did your team use any AI tool in completing this project?**
 - [x] Yes, we used AI assistance as described below.
 
-**Tool(s) used:** Claude (Anthropic), GitHub Copilot  
-**Specific purpose:** Debugging CUDA OOM errors, clarifying Triton kernel semantics, polishing report prose, reorganizing README structure  
-**Sections affected:** KIVI Triton kernel debugging, report §V Discussion, README §6  
-**Verification:** All reported numbers were measured by running experiments ourselves on Modal H100 containers. All code was tested and validated against published baselines.
+**Tool(s) used:** Claude (Anthropic), GitHub Copilot
+
+**Specific purpose:** Debugging CUDA OOM errors during KIVI kernel integration; clarifying Triton kernel semantics; polishing report prose drafted by team members; reorganizing the README from an earlier flat structure into the HPML template layout.
+
+**Sections affected:** Triton-kernel debugging in `methods/kivi_kernels/`; report §V Discussion (proofreading only); README §3, §4, §6 (structure and prose polish).
+
+**How we verified correctness:** Every reported number was produced by running our own Modal scripts against H100 containers; we re-ran each headline experiment at least twice and confirmed agreement. Profiler-trace interpretations were checked against raw `torch.profiler` traces in `results/`. AI-suggested code was rewritten in our own words and verified to produce identical results to a hand-written reference.
+
+By submitting this project, the team confirms that the analysis, interpretations, and conclusions are our own, and that any AI assistance is fully disclosed above. The same disclosure block appears as an appendix in the final report.
 
 ### License
 
-Released under the MIT License.
+Released under the MIT License. See [`LICENSE`](LICENSE).
 
 ### Citation
 
