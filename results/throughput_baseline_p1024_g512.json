@@ -7,51 +7,51 @@
   "results": {
     "1": {
       "oom": false,
-      "mean_ttft_ms": 37.092258749997775,
-      "mean_decode_tps": 71.6596795293822,
-      "mean_total_tps": 71.42808324496528,
+      "mean_ttft_ms": 56.47146299999939,
+      "mean_decode_tps": 69.6129273459807,
+      "mean_total_tps": 69.20843400205257,
       "mean_peak_mem_gb": 15.12047616,
-      "n_stable": 4
+      "n_stable": 2
     },
     "2": {
       "oom": false,
-      "mean_ttft_ms": 65.64402949999959,
-      "mean_decode_tps": 139.5678134631371,
-      "mean_total_tps": 138.5973339486414,
+      "mean_ttft_ms": 64.26927249999892,
+      "mean_decode_tps": 135.00870924834084,
+      "mean_total_tps": 134.13408125144235,
       "mean_peak_mem_gb": 16.73093376,
-      "n_stable": 4
+      "n_stable": 2
     },
     "4": {
       "oom": false,
-      "mean_ttft_ms": 126.76207724999955,
-      "mean_decode_tps": 240.00922329097233,
-      "mean_total_tps": 236.95128896078026,
+      "mean_ttft_ms": 124.51978050000179,
+      "mean_decode_tps": 242.26752383940925,
+      "mean_total_tps": 239.21129757632838,
       "mean_peak_mem_gb": 19.951455744,
-      "n_stable": 4
+      "n_stable": 2
     },
     "8": {
       "oom": false,
-      "mean_ttft_ms": 265.30863749999867,
-      "mean_decode_tps": 342.7329099213946,
-      "mean_total_tps": 335.9324784484055,
+      "mean_ttft_ms": 251.8455940000024,
+      "mean_decode_tps": 351.30086295580065,
+      "mean_total_tps": 344.5318855928292,
       "mean_peak_mem_gb": 26.392499712,
-      "n_stable": 4
+      "n_stable": 2
     },
     "16": {
       "oom": false,
-      "mean_ttft_ms": 494.827968249993,
-      "mean_decode_tps": 433.88145055060204,
-      "mean_total_tps": 423.6039107439322,
+      "mean_ttft_ms": 489.9316465000112,
+      "mean_decode_tps": 438.0036190284078,
+      "mean_total_tps": 427.63637187441066,
       "mean_peak_mem_gb": 39.275308544,
-      "n_stable": 4
+      "n_stable": 2
     },
     "32": {
       "oom": false,
-      "mean_ttft_ms": 1010.0964957499912,
-      "mean_decode_tps": 509.8338130537493,
-      "mean_total_tps": 495.2343145475581,
+      "mean_ttft_ms": 998.0566485000111,
+      "mean_decode_tps": 496.58407894933407,
+      "mean_total_tps": 482.91889479473116,
       "mean_peak_mem_gb": 65.040598528,
-      "n_stable": 4
+      "n_stable": 2
     },
     "64": {
       "oom": true
