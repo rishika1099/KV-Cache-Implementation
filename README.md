@@ -207,7 +207,7 @@ Results are written to `results/` and logged to W&B.
 
 **Sections affected:** Triton-kernel debugging in `methods/kivi_kernels/`; report §V Discussion (proofreading only); README §3, §4, §6 (structure and prose polish).
 
-**How we verified correctness:** Every reported number was produced by running our own Modal scripts against H100 containers; we re-ran each headline experiment at least twice and confirmed agreement. Profiler-trace interpretations were checked against raw `torch.profiler` traces in `results/`. 
+**How we verified correctness:** Every reported number was produced by running our own Modal scripts against H100 containers; we re-ran each headline experiment at least twice and confirmed agreement. Profiler-trace interpretations were checked against raw `torch.profiler` traces in `results/`. AI-suggested code was rewritten in our own words and verified to produce identical results to a hand-written reference.
 
 By submitting this project, the team confirms that the analysis, interpretations, and conclusions are our own, and that any AI assistance is fully disclosed above. The same disclosure block appears as an appendix in the final report.
 
