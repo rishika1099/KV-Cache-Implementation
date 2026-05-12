@@ -19,7 +19,7 @@
 
 - **GitHub repository:** [https://github.com/rishika1099/KV-Cache-Implementation](https://github.com/rishika1099/KV-Cache-Implementation)
 - **Final report:** [`deliverables/TeamKV_HPML_Final_Report.pdf`](deliverables/TeamKV_HPML_Final_Report.pdf)
-- **Final presentation:** [`deliverables/KV_Cache_Optimization_Presentation.pdf`](deliverables/KV_Cache_Optimization_Presentation.pdf)
+- **Final presentation:** [`deliverables/TeamKV_HPML_Final_Presentation.pdf`](deliverables/KV_Cache_Optimization_Presentation.pdf)
 - **Experiment-tracking dashboard:** [https://wandb.ai/rm4318-columbia-university/kv-cache-hpml](https://wandb.ai/rm4318-columbia-university/kv-cache-hpml)
 - **Companion blog post (bonus):** [https://rishikamamidibathula.substack.com/p/kv-cache-optimization](https://rishikamamidibathula.substack.com/p/kv-cache-optimization)
 
